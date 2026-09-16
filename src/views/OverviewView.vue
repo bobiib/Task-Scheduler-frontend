@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
+import TaskModal from '../components/tasks/TaskModal.vue'
 
 const taskStore = useTaskStore()
 const searchQuery = ref('')
 const currentView = ref<'grid' | 'list'>('grid')
+const isModalOpen = ref(false)
 </script>
 
 <template>
@@ -16,7 +18,7 @@ const currentView = ref<'grid' | 'list'>('grid')
         <p class="page-subtitle">Plane, priorisiere und erledige deine Aufgaben an einem Ort.</p>
       </div>
 
-      <button type="button" class="btn-primary">
+      <button type="button" class="btn-primary" @click="isModalOpen = true">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"></line>
           <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -160,6 +162,12 @@ const currentView = ref<'grid' | 'list'>('grid')
         @toggle="taskStore.toggleTask"
       />
     </div>
+
+    <TaskModal 
+      :is-open="isModalOpen" 
+      @close="isModalOpen = false" 
+      @create="taskStore.addTask"
+    />
   </div>
 </template>
 
