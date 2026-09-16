@@ -84,10 +84,20 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
+    function addTask(newTask: Omit<Task, 'id' | 'completed'>) {
+        const task: Task = {
+            ...newTask,
+            id: Date.now().toString(),
+            completed: false
+        }
+        tasks.value.unshift(task)
+    }
+
     return {
         tasks,
         openTasks,
         completedTasks,
-        toggleTask
+        toggleTask,
+        addTask
     }
 })
