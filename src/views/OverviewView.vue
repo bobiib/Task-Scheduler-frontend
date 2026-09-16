@@ -1,13 +1,28 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { Task } from '../types/task'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
+import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 
 const taskStore = useTaskStore()
 const searchQuery = ref('')
 const currentView = ref<'grid' | 'list'>('grid')
 const isModalOpen = ref(false)
+
+const isDrawerOpen = ref(false)
+const selectedTask = ref<Task | null>(null)
+
+function openDetail(task: Task) {
+  selectedTask.value = task
+  isDrawerOpen.value = true
+}
+
+function closeDrawer() {
+  isDrawerOpen.value = false
+  selectedTask.value = null
+}
 </script>
 
 <template>
@@ -160,6 +175,7 @@ const isModalOpen = ref(false)
         :key="task.id" 
         :task="task" 
         @toggle="taskStore.toggleTask"
+        @click="openDetail"
       />
     </div>
 
@@ -167,6 +183,13 @@ const isModalOpen = ref(false)
       :is-open="isModalOpen" 
       @close="isModalOpen = false" 
       @create="taskStore.addTask"
+    />
+
+    <TaskDetailDrawer 
+      :is-open="isDrawerOpen" 
+      :task="selectedTask" 
+      @close="closeDrawer" 
+      @toggle="taskStore.toggleTask" 
     />
   </div>
 </template>
