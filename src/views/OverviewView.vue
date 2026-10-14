@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
@@ -7,10 +7,36 @@ import TaskModal from '../components/tasks/TaskModal.vue'
 const taskStore = useTaskStore()
 const searchQuery = ref('')
 const currentView = ref<'grid' | 'list'>('grid')
+const selectedUser = ref('Alle')
+const selectedLabel = ref('Alle')
 const isModalOpen = ref(false)
 
 onMounted(() => {
-  taskStore.fetchTasks()
+  if (taskStore.tasks.length === 0) {
+    taskStore.fetchTasks()
+  }
+})
+
+const filteredTasks = computed(() => {
+  return taskStore.tasks.filter(task => {
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.toLowerCase()
+      const matchTitle = task.title.toLowerCase().includes(q)
+      const matchDesc = task.description?.toLowerCase().includes(q) || false
+      if (!matchTitle && !matchDesc) return false
+    }
+
+    if (selectedUser.value !== 'Alle') {
+      if (task.assignee?.name !== selectedUser.value) return false
+    }
+
+    if (selectedLabel.value !== 'Alle') {
+      const labelName = task.labels?.[0]?.name || task.label?.name
+      if (labelName !== selectedLabel.value) return false
+    }
+
+    return true
+  })
 })
 </script>
 
@@ -112,20 +138,23 @@ onMounted(() => {
       </div>
 
       <div class="filter-actions">
-        <button type="button" class="filter-dropdown">
-          <span>Alle User</span>
-          <span class="chevron">⌵</span>
-        </button>
+        <select v-model="selectedUser" class="filter-select">
+          <option value="Alle">Alle User</option>
+          <option value="Fabio">Fabio</option>
+          <option value="Liam">Liam</option>
+          <option value="Dmytro">Dmytro</option>
+          <option value="Boris">Boris</option>
+          <option value="Projektteam">Projektteam</option>
+        </select>
 
-        <button type="button" class="filter-dropdown">
-          <span>Zeitraum</span>
-          <span class="chevron">⌵</span>
-        </button>
-
-        <button type="button" class="filter-dropdown">
-          <span>Labels</span>
-          <span class="chevron">⌵</span>
-        </button>
+        <select v-model="selectedLabel" class="filter-select">
+          <option value="Alle">Labels</option>
+          <option value="Development">Development</option>
+          <option value="Schule">Schule</option>
+          <option value="IT">IT</option>
+          <option value="Design">Design</option>
+          <option value="Organisation">Organisation</option>
+        </select>
 
         <div class="view-switch">
           <button 
@@ -133,6 +162,7 @@ onMounted(() => {
             class="switch-btn" 
             :class="{ active: currentView === 'grid' }"
             @click="currentView = 'grid'"
+            title="Kachelansicht"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
@@ -146,6 +176,7 @@ onMounted(() => {
             class="switch-btn" 
             :class="{ active: currentView === 'list' }"
             @click="currentView = 'list'"
+            title="Listenansicht"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -162,7 +193,7 @@ onMounted(() => {
 
     <div class="section-title-row">
       <h2 class="section-title">Aktuelle Tasks</h2>
-      <span class="tasks-count">{{ taskStore.openTasks.length }} offen</span>
+      <span class="tasks-count">{{ filteredTasks.filter(t => !t.completed).length }} offen</span>
     </div>
 
     <div v-if="taskStore.loading" class="loading-state">
@@ -170,17 +201,54 @@ onMounted(() => {
       <span>Tasks werden geladen...</span>
     </div>
 
-    <div v-else-if="taskStore.tasks.length === 0" class="empty-state">
+    <div v-else-if="filteredTasks.length === 0" class="empty-state">
       <p>Keine Tasks gefunden. Erstelle jetzt deinen ersten Task!</p>
     </div>
 
-    <div v-else class="tasks-grid">
+    <div v-else-if="currentView === 'grid'" class="tasks-grid">
       <TaskCard 
-        v-for="task in taskStore.tasks" 
+        v-for="task in filteredTasks" 
         :key="task.instanceId" 
         :task="task" 
         @toggle="taskStore.toggleTask"
       />
+    </div>
+
+    <div v-else class="tasks-list">
+      <div 
+        v-for="task in filteredTasks" 
+        :key="task.instanceId" 
+        class="task-list-item"
+        :class="{ 'is-completed': task.completed }"
+      >
+        <button 
+          type="button" 
+          class="checkbox-btn" 
+          :class="{ checked: task.completed }"
+          @click="taskStore.toggleTask(task.instanceId)"
+        >
+          <svg v-if="task.completed" viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="3" fill="none">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </button>
+
+        <div class="list-title-box">
+          <span class="list-task-title">{{ task.title }}</span>
+          <span class="label-badge" :class="`label-${(task.labels?.[0] || task.label)?.color || 'development'}`">
+            {{ (task.labels?.[0] || task.label)?.name || 'Task' }}
+          </span>
+        </div>
+
+        <div class="list-meta">
+          <span>{{ task.dueDate }}</span>
+          <span v-if="task.dueTime">· {{ task.dueTime }}</span>
+        </div>
+
+        <div class="list-assignee">
+          <span class="avatar-mini">{{ task.assignee?.initials || 'TS' }}</span>
+          <span>{{ task.assignee?.name || 'Nicht zugewiesen' }}</span>
+        </div>
+      </div>
     </div>
 
     <TaskModal 
@@ -289,25 +357,10 @@ onMounted(() => {
   justify-content: center;
 }
 
-.icon-purple {
-  background: #EEF2FF;
-  color: #6366F1;
-}
-
-.icon-amber {
-  background: #FEF3C7;
-  color: #D97706;
-}
-
-.icon-violet {
-  background: #F3E8FF;
-  color: #9333EA;
-}
-
-.icon-green {
-  background: #DCFCE7;
-  color: #16A34A;
-}
+.icon-purple { background: #EEF2FF; color: #6366F1; }
+.icon-amber { background: #FEF3C7; color: #D97706; }
+.icon-violet { background: #F3E8FF; color: #9333EA; }
+.icon-green { background: #DCFCE7; color: #16A34A; }
 
 .stat-label {
   font-size: 0.85rem;
@@ -370,28 +423,15 @@ onMounted(() => {
   gap: 10px;
 }
 
-.filter-dropdown {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.filter-select {
   padding: 7px 12px;
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
   border-radius: 10px;
   font-size: 0.82rem;
-  font-weight: 500;
   color: #475569;
-  transition: all 0.15s;
-}
-
-.filter-dropdown:hover {
-  background: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
-.chevron {
-  font-size: 0.75rem;
-  color: #94A3B8;
+  font-family: inherit;
+  outline: none;
 }
 
 .view-switch {
@@ -409,7 +449,6 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: #64748B;
-  transition: all 0.15s;
 }
 
 .switch-btn.active {
@@ -442,6 +481,92 @@ onMounted(() => {
   gap: 20px;
 }
 
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-list-item {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.15s;
+}
+
+.task-list-item:hover {
+  border-color: #CBD5E1;
+}
+
+.task-list-item.is-completed {
+  opacity: 0.6;
+}
+
+.task-list-item.is-completed .list-task-title {
+  text-decoration: line-through;
+}
+
+.checkbox-btn {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #CBD5E1;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.checkbox-btn.checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.list-title-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.list-task-title {
+  font-weight: 600;
+  color: #1E293B;
+  font-size: 0.95rem;
+}
+
+.list-meta {
+  font-size: 0.82rem;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.list-assignee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.avatar-mini {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #FFFFFF;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .loading-state,
 .empty-state {
   background: #FFFFFF;
@@ -466,8 +591,19 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
+
+.label-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.label-development { background-color: #EEF2FF; color: #4F46E5; }
+.label-schule { background-color: #F3E8FF; color: #9333EA; }
+.label-it { background-color: #E0F2FE; color: #0284C7; }
+.label-design { background-color: #FEE2E2; color: #EF4444; }
+.label-organisation { background-color: #FEF3C7; color: #D97706; }
 </style>
