@@ -22,9 +22,11 @@ export const useLabelStore = defineStore('labels', () => {
 
     function getTaskCount(labelName: string): number {
         return taskStore.tasks.filter(
-            task => task.label.name.toLowerCase() === labelName.toLowerCase()
+            task => task.labels?.some(l => l.name.toLowerCase() === labelName.toLowerCase()) ||
+                task.label?.name.toLowerCase() === labelName.toLowerCase()
         ).length
     }
+
 
     function addLabel(name: string, color: LabelColor) {
         const newLabel: LabelItem = {

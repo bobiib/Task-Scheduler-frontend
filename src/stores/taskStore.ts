@@ -1,102 +1,74 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Task } from '../types/task'
+import type { Task, CreateTaskPayload } from '../types/task'
+import { taskApi } from '../api/taskApi'
 
 export const useTaskStore = defineStore('tasks', () => {
-    const tasks = ref<Task[]>([
-        {
-            id: '1',
-            title: 'Sprint-Planning abschliessen',
-            dueDate: 'Heute',
-            dueTime: '14:00',
-            isDueToday: true,
-            label: { id: 'l1', name: 'Development', color: 'development' },
-            recurrence: 'Wöchentlich',
-            reminder: '1 Std. vorher',
-            assignee: { id: 'u1', name: 'Liam', initials: 'LB' },
-            completed: false
-        },
-        {
-            id: '2',
-            title: 'Projektstatusbericht Sprint 1',
-            dueDate: '14. Okt.',
-            dueTime: '17:00',
-            isDueToday: false,
-            label: { id: 'l2', name: 'Schule', color: 'schule' },
-            reminder: '3 Tage vorher',
-            assignee: { id: 'u2', name: 'Liam + Team', initials: 'LB' },
-            completed: false
-        },
-        {
-            id: '3',
-            title: 'Server-Backup prüfen',
-            dueDate: 'Heute',
-            dueTime: '18:30',
-            isDueToday: true,
-            label: { id: 'l3', name: 'IT', color: 'it' },
-            recurrence: 'Täglich',
-            reminder: '30 Min. vorher',
-            assignee: { id: 'u3', name: 'Dmytro', initials: 'DY' },
-            completed: false
-        },
-        {
-            id: '4',
-            title: 'Mockups finalisieren',
-            dueDate: '02. Sept.',
-            dueTime: '12:00',
-            isDueToday: false,
-            label: { id: 'l4', name: 'Design', color: 'design' },
-            reminder: '1 Tag vorher',
-            assignee: { id: 'u1', name: 'Liam', initials: 'LB' },
-            completed: false
-        },
-        {
-            id: '5',
-            title: 'Team-Meeting vorbereiten',
-            dueDate: 'Morgen',
-            dueTime: '10:00',
-            isDueToday: false,
-            label: { id: 'l5', name: 'Organisation', color: 'organisation' },
-            reminder: '2 Std. vorher',
-            assignee: { id: 'u4', name: 'Boris', initials: 'BO' },
-            completed: false
-        },
-        {
-            id: '6',
-            title: 'Zwischenpräsentation planen',
-            dueDate: '20. Okt.',
-            dueTime: '15:00',
-            isDueToday: false,
-            label: { id: 'l2', name: 'Schule', color: 'schule' },
-            reminder: '1 Woche vorher',
-            assignee: { id: 'u5', name: 'Projektteam', initials: 'PT' },
-            completed: false
-        }
-    ])
+    const tasks = ref<Task[]>([])
+    const loading = ref(false)
+    const error = ref<string | null>(null)
 
     const openTasks = computed(() => tasks.value.filter(t => !t.completed))
     const completedTasks = computed(() => tasks.value.filter(t => t.completed))
 
-    function toggleTask(id: string) {
-        const task = tasks.value.find(t => t.id === id)
-        if (task) {
-            task.completed = !task.completed
+    async function fetchTasks() {
+        loading.value = true
+        error.value = null
+        try {
+            const data = await taskApi.getTasks()
+            tasks.value = data
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                error.value = err.message
+            } else {
+                error.value = 'Fehler beim Laden der Tasks'
+            }
+        } finally {
+            loading.value = false
         }
     }
 
-    function addTask(newTask: Omit<Task, 'id' | 'completed'>) {
-        const task: Task = {
-            ...newTask,
-            id: Date.now().toString(),
-            completed: false
+    async function toggleTask(instanceId: number) {
+        const task = tasks.value.find(t => t.instanceId === instanceId)
+        if (!task) return
+
+        const previousState = task.completed
+        task.completed = !previousState
+
+        try {
+            await taskApi.updateInstanceStatus(instanceId, task.completed)
+        } catch (err: unknown) {
+            task.completed = previousState
+            if (err instanceof Error) {
+                error.value = err.message
+            }
         }
-        tasks.value.unshift(task)
+    }
+
+    async function addTask(payload: CreateTaskPayload) {
+        loading.value = true
+        error.value = null
+        try {
+            const created = await taskApi.createTask(payload)
+            tasks.value.unshift(created)
+            return created
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                error.value = err.message
+            }
+            throw err
+        } finally {
+            loading.value = false
+        }
     }
 
     return {
         tasks,
+        loading,
+        error,
         openTasks,
         completedTasks,
+        fetchTasks,
         toggleTask,
         addTask
     }
