@@ -1,7 +1,7 @@
 export type TeamRole = 'admin' | 'member'
 
 export interface User {
-  id: string
+  id: number
   name: string
   email: string
   initials: string
@@ -9,7 +9,7 @@ export interface User {
 }
 
 export interface TeamMember {
-  userId: string
+  userId: number
   name: string
   email: string
   initials: string
@@ -17,10 +17,10 @@ export interface TeamMember {
 }
 
 export interface Team {
-  id: string
+  id: number
   name: string
   initials: string
   color: string
-  createdByUserId: string
+  createdByUserId: number
   members: TeamMember[]
 }

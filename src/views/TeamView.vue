@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useTeamStore } from '../stores/teamStore'
 
 const teamStore = useTeamStore()
@@ -9,10 +9,14 @@ const searchQuery = ref('')
 
 const isCreateModalOpen = ref(false)
 const newTeamName = ref('')
-const newTeamCreatorId = ref('u1')
+const newTeamCreatorId = ref<number>(0)
 const createError = ref('')
 
-const selectedUserToAdd = ref<Record<string, string>>({})
+const selectedUserToAdd = ref<Record<number, number | ''>>({})
+
+onMounted(() => {
+  teamStore.fetchTeams()
+})
 
 const filteredTeams = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -40,7 +44,7 @@ const filteredUsers = computed(() => {
 
 function openCreateModal() {
   newTeamName.value = ''
-  newTeamCreatorId.value = teamStore.users[0]?.id || 'u1'
+  newTeamCreatorId.value = teamStore.users[0]?.id ?? 0
   createError.value = ''
   isCreateModalOpen.value = true
 }
@@ -50,26 +54,26 @@ function closeCreateModal() {
   createError.value = ''
 }
 
-function handleCreateTeam() {
+async function handleCreateTeam() {
   if (!newTeamName.value.trim()) {
     createError.value = 'Bitte gib einen Namen für das Team ein.'
     return
   }
 
-  const success = teamStore.createTeam(newTeamName.value, newTeamCreatorId.value)
+  const success = await teamStore.createTeam(newTeamName.value, newTeamCreatorId.value)
   if (!success) {
-    createError.value = 'Ein Team mit diesem Namen existiert bereits.'
+    createError.value = teamStore.error || 'Ein Team mit diesem Namen existiert bereits.'
     return
   }
 
   closeCreateModal()
 }
 
-function handleAddMember(teamId: string) {
+async function handleAddMember(teamId: number) {
   const userId = selectedUserToAdd.value[teamId]
   if (!userId) return
 
-  teamStore.addMember(teamId, userId, 'member')
+  await teamStore.addMember(teamId, userId, 'member')
   selectedUserToAdd.value[teamId] = ''
 }
 </script>
@@ -129,6 +133,10 @@ function handleAddMember(teamId: string) {
           class="search-input"
         />
       </div>
+    </div>
+
+    <div v-if="teamStore.error && !isCreateModalOpen" class="form-error">
+      {{ teamStore.error }}
     </div>
 
     <div v-if="activeTab === 'teams'" class="teams-section">

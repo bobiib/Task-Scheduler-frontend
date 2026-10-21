@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useLabelStore } from '../stores/labelStore'
 import LabelCard from '../components/labels/LabelCard.vue'
 import LabelModal from '../components/labels/LabelModal.vue'
 
 const labelStore = useLabelStore()
 const isModalOpen = ref(false)
+
+onMounted(() => {
+  labelStore.fetchLabels()
+})
 </script>
 
 <template>
@@ -25,12 +29,14 @@ const isModalOpen = ref(false)
       </button>
     </div>
 
+    <p v-if="labelStore.error" class="error-message">{{ labelStore.error }}</p>
+
     <div class="labels-grid">
       <LabelCard
         v-for="label in labelStore.labels"
         :key="label.id"
         :label="label"
-        :task-count="labelStore.getTaskCount(label.name)"
+        :task-count="label.taskCount"
         @delete="labelStore.deleteLabel"
       />
     </div>
@@ -86,6 +92,11 @@ const isModalOpen = ref(false)
 .btn-primary:hover {
   background-color: var(--primary-hover);
   box-shadow: 0 6px 20px rgba(82, 67, 224, 0.4);
+}
+
+.error-message {
+  color: #E11D48;
+  font-size: 0.9rem;
 }
 
 .labels-grid {

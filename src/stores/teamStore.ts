@@ -1,56 +1,72 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { User, Team, TeamMember, TeamRole } from '../types/team'
+import { teamApi, type ApiTeam } from '../api/teamApi'
 
 export const useTeamStore = defineStore('team', () => {
-  const users = ref<User[]>([
-    { id: 'u1', name: 'Boris', email: 'boris@task-scheduler.ch', initials: 'BO', color: '#5243E0' },
-    { id: 'u2', name: 'Liam Bruno', email: 'liam@task-scheduler.ch', initials: 'LB', color: '#0284C7' },
-    { id: 'u3', name: 'Dmytro Yermakov', email: 'dmytro@task-scheduler.ch', initials: 'DY', color: '#9333EA' },
-    { id: 'u4', name: 'Fabio', email: 'fabio@task-scheduler.ch', initials: 'FA', color: '#EA580C' }
-  ])
+  const users = ref<User[]>([])
+  const teams = ref<Team[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  const teams = ref<Team[]>([
-    {
-      id: 't1',
-      name: 'Frontend-Entwicklung',
-      initials: 'FE',
+  function toTeam(team: ApiTeam): Team {
+    return {
+      id: team.id,
+      name: team.name,
+      initials: team.initials,
       color: '#5243E0',
-      createdByUserId: 'u1',
-      members: [
-        { userId: 'u1', name: 'Boris', email: 'boris@task-scheduler.ch', initials: 'BO', role: 'admin' },
-        { userId: 'u3', name: 'Dmytro Yermakov', email: 'dmytro@task-scheduler.ch', initials: 'DY', role: 'member' }
-      ]
-    },
-    {
-      id: 't2',
-      name: 'Backend & DB',
-      initials: 'BE',
-      color: '#0284C7',
-      createdByUserId: 'u2',
-      members: [
-        { userId: 'u2', name: 'Liam Bruno', email: 'liam@task-scheduler.ch', initials: 'LB', role: 'admin' },
-        { userId: 'u4', name: 'Fabio', email: 'fabio@task-scheduler.ch', initials: 'FA', role: 'member' }
-      ]
-    },
-    {
-      id: 't3',
-      name: 'Projektleitung',
-      initials: 'PL',
-      color: '#D97706',
-      createdByUserId: 'u1',
-      members: [
-        { userId: 'u1', name: 'Boris', email: 'boris@task-scheduler.ch', initials: 'BO', role: 'admin' },
-        { userId: 'u2', name: 'Liam Bruno', email: 'liam@task-scheduler.ch', initials: 'LB', role: 'admin' }
-      ]
+      createdByUserId: team.createdByUserId,
+      members: team.members.map(member => ({
+        userId: member.id,
+        name: member.name,
+        email: getUserById(member.id)?.email ?? '',
+        initials: member.initials,
+        role: member.role
+      }))
     }
-  ])
+  }
 
-  function getTeamById(teamId: string): Team | undefined {
+  function replaceTeam(team: ApiTeam) {
+    teams.value = teams.value.map(t => (t.id === team.id ? toTeam(team) : t))
+  }
+
+  function setError(err: unknown, fallback: string) {
+    error.value = err instanceof Error ? err.message : fallback
+  }
+
+  async function fetchTeams() {
+    loading.value = true
+    error.value = null
+    try {
+      users.value = await teamApi.getUsers()
+      teams.value = (await teamApi.getTeams()).map(toTeam)
+    } catch (err: unknown) {
+      setError(err, 'Fehler beim Laden der Teams')
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function saveMembers(teamId: number, members: TeamMember[]): Promise<boolean> {
+    error.value = null
+    try {
+      const updated = await teamApi.updateTeam(teamId, {
+        memberIds: members.map(m => m.userId),
+        adminIds: members.filter(m => m.role === 'admin').map(m => m.userId)
+      })
+      replaceTeam(updated)
+      return true
+    } catch (err: unknown) {
+      setError(err, 'Fehler beim Speichern des Teams')
+      return false
+    }
+  }
+
+  function getTeamById(teamId: number): Team | undefined {
     return teams.value.find(t => t.id === teamId)
   }
 
-  function getUserById(userId: string): User | undefined {
+  function getUserById(userId: number): User | undefined {
     return users.value.find(u => u.id === userId)
   }
 
@@ -58,7 +74,7 @@ export const useTeamStore = defineStore('team', () => {
     return team.members.filter(m => m.role === 'admin').length
   }
 
-  function canDemoteAdmin(teamId: string, userId: string): boolean {
+  function canDemoteAdmin(teamId: number, userId: number): boolean {
     const team = getTeamById(teamId)
     if (!team) return false
     const member = team.members.find(m => m.userId === userId)
@@ -66,7 +82,7 @@ export const useTeamStore = defineStore('team', () => {
     return getAdminCount(team) > 1
   }
 
-  function canRemoveMember(teamId: string, userId: string): boolean {
+  function canRemoveMember(teamId: number, userId: number): boolean {
     const team = getTeamById(teamId)
     if (!team) return false
     if (team.members.length <= 1) return false
@@ -78,7 +94,7 @@ export const useTeamStore = defineStore('team', () => {
     return true
   }
 
-  function createTeam(name: string, creatorUserId: string): boolean {
+  async function createTeam(name: string, creatorUserId: number): Promise<boolean> {
     const trimmed = name.trim()
     if (!trimmed) return false
     if (teams.value.some(t => t.name.toLowerCase() === trimmed.toLowerCase())) return false
@@ -93,76 +109,69 @@ export const useTeamStore = defineStore('team', () => {
       .substring(0, 3)
       .toUpperCase() || 'TM'
 
-    const newTeam: Team = {
-      id: 't' + Date.now().toString(),
-      name: trimmed,
-      initials,
-      color: '#5243E0',
-      createdByUserId: creator.id,
-      members: [
-        {
-          userId: creator.id,
-          name: creator.name,
-          email: creator.email,
-          initials: creator.initials,
-          role: 'admin'
-        }
-      ]
+    error.value = null
+    try {
+      const created = await teamApi.createTeam({
+        name: trimmed,
+        initials,
+        createdByUserId: creator.id,
+        memberIds: [creator.id],
+        adminIds: [creator.id]
+      })
+      teams.value.push(toTeam(created))
+      return true
+    } catch (err: unknown) {
+      setError(err, 'Fehler beim Erstellen des Teams')
+      return false
     }
-
-    teams.value.push(newTeam)
-    return true
   }
 
-  function addMember(teamId: string, userId: string, role: TeamRole = 'member'): boolean {
+  async function addMember(teamId: number, userId: number, role: TeamRole = 'member'): Promise<boolean> {
     const team = getTeamById(teamId)
     const user = getUserById(userId)
     if (!team || !user) return false
     if (team.members.some(m => m.userId === userId)) return false
 
-    team.members.push({
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      initials: user.initials,
-      role
-    })
-    return true
+    return saveMembers(teamId, [
+      ...team.members,
+      { userId: user.id, name: user.name, email: user.email, initials: user.initials, role }
+    ])
   }
 
-  function removeMember(teamId: string, userId: string): boolean {
+  async function removeMember(teamId: number, userId: number): Promise<boolean> {
     if (!canRemoveMember(teamId, userId)) return false
     const team = getTeamById(teamId)
     if (!team) return false
 
-    team.members = team.members.filter(m => m.userId !== userId)
-    return true
+    return saveMembers(teamId, team.members.filter(m => m.userId !== userId))
   }
 
-  function toggleRole(teamId: string, userId: string): boolean {
+  async function toggleRole(teamId: number, userId: number): Promise<boolean> {
     const team = getTeamById(teamId)
     if (!team) return false
     const member = team.members.find(m => m.userId === userId)
     if (!member) return false
+    if (member.role === 'admin' && !canDemoteAdmin(teamId, userId)) return false
 
-    if (member.role === 'admin') {
-      if (!canDemoteAdmin(teamId, userId)) return false
-      member.role = 'member'
-    } else {
-      member.role = 'admin'
+    const newRole: TeamRole = member.role === 'admin' ? 'member' : 'admin'
+    return saveMembers(teamId, team.members.map(m => (m.userId === userId ? { ...m, role: newRole } : m)))
+  }
+
+  async function deleteTeam(teamId: number): Promise<void> {
+    error.value = null
+    try {
+      await teamApi.deleteTeam(teamId)
+      teams.value = teams.value.filter(t => t.id !== teamId)
+    } catch (err: unknown) {
+      setError(err, 'Fehler beim Löschen des Teams')
     }
-    return true
   }
 
-  function deleteTeam(teamId: string): void {
-    teams.value = teams.value.filter(t => t.id !== teamId)
-  }
-
-  function getUserTeams(userId: string): Team[] {
+  function getUserTeams(userId: number): Team[] {
     return teams.value.filter(team => team.members.some(m => m.userId === userId))
   }
 
-  function getAvailableUsersForTeam(teamId: string): User[] {
+  function getAvailableUsersForTeam(teamId: number): User[] {
     const team = getTeamById(teamId)
     if (!team) return []
     const memberIds = new Set(team.members.map(m => m.userId))
@@ -172,6 +181,9 @@ export const useTeamStore = defineStore('team', () => {
   return {
     users,
     teams,
+    loading,
+    error,
+    fetchTeams,
     getTeamById,
     getUserById,
     getAdminCount,
