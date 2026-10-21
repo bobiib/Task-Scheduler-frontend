@@ -137,7 +137,9 @@ const filteredTasks = computed(() => {
           <div class="task-cell-main">
             <div class="task-row-title">{{ t.title }}</div>
             <div class="task-row-sub">
-              <span class="label-badge" :class="`label-${t.label.color}`">{{ t.label.name }}</span>
+              <span class="label-badge" :class="`label-${(t.labels?.[0] || t.label)?.color || 'development'}`">
+                {{ (t.labels?.[0] || t.label)?.name || 'Task' }}
+              </span>
               <span v-if="t.reminder" class="row-meta">♢ {{ t.reminder }}</span>
             </div>
           </div>
@@ -170,7 +172,7 @@ const filteredTasks = computed(() => {
               type="button" 
               class="row-check-button" 
               :class="{ checked: t.completed }"
-              @click.stop="taskStore.toggleTask(t.id)"
+              @click.stop="taskStore.toggleTask(t.instanceId)"
               title="Status ändern"
             >
               ✓

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Task, LabelColor } from '../../types/task'
+import type { CreateTaskPayload } from '../../types/task'
 
 const props = defineProps<{
   isOpen: boolean
@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'create', task: Omit<Task, 'id' | 'completed'>): void
+  (e: 'create', payload: CreateTaskPayload): void
 }>()
 
 const title = ref('')
@@ -17,25 +17,10 @@ const dueDate = ref('')
 const dueTime = ref('12:00')
 const scheduleType = ref('date')
 const recurrence = ref('Keine')
-const selectedLabel = ref<string>('Schule')
-const selectedAssignee = ref('Liam')
+const selectedLabelId = ref<number>(2)
+const selectedAssigneeType = ref<'user' | 'team'>('user')
+const selectedAssigneeId = ref<number>(1)
 const selectedReminder = ref('30 Min. vorher')
-
-const labelMap: Record<string, { name: string; color: LabelColor }> = {
-  Schule: { name: 'Schule', color: 'schule' },
-  Development: { name: 'Development', color: 'development' },
-  IT: { name: 'IT', color: 'it' },
-  Design: { name: 'Design', color: 'design' },
-  Organisation: { name: 'Organisation', color: 'organisation' }
-}
-
-const assigneeMap: Record<string, { name: string; initials: string }> = {
-  Liam: { name: 'Liam', initials: 'LB' },
-  Dmytro: { name: 'Dmytro', initials: 'DY' },
-  Boris: { name: 'Boris', initials: 'BO' },
-  Fabio: { name: 'Fabio', initials: 'FA' },
-  Projektteam: { name: 'Projektteam', initials: 'PT' }
-}
 
 function handleClose() {
   resetForm()
@@ -49,43 +34,36 @@ function resetForm() {
   dueTime.value = '12:00'
   scheduleType.value = 'date'
   recurrence.value = 'Keine'
-  selectedLabel.value = 'Schule'
-  selectedAssignee.value = 'Liam'
+  selectedLabelId.value = 2
+  selectedAssigneeType.value = 'user'
+  selectedAssigneeId.value = 1
   selectedReminder.value = '30 Min. vorher'
 }
 
 function handleSubmit() {
   if (!title.value.trim()) return
 
-  const labelConfig = labelMap[selectedLabel.value] || { name: selectedLabel.value, color: 'schule' }
-  const assigneeConfig = assigneeMap[selectedAssignee.value] || { name: selectedAssignee.value, initials: 'US' }
-
-  let displayDate = dueDate.value
-  if (!displayDate) {
+  let dateValue = dueDate.value
+  if (!dateValue) {
     const today = new Date()
-    displayDate = `${today.getDate().toString().padStart(2, '0')}.${(today.getMonth() + 1).toString().padStart(2, '0')}.${today.getFullYear()}`
+    dateValue = today.toISOString().slice(0, 10)
   }
 
-  emit('create', {
+  const payload: CreateTaskPayload = {
     title: title.value.trim(),
-    description: description.value.trim(),
-    dueDate: displayDate,
+    description: description.value.trim() || undefined,
+    scheduleType: scheduleType.value,
+    scheduleDate: dateValue,
     dueTime: dueTime.value || undefined,
-    isDueToday: true,
-    label: {
-      id: `lbl-${Date.now()}`,
-      name: labelConfig.name,
-      color: labelConfig.color
-    },
-    recurrence: recurrence.value !== 'Keine' ? recurrence.value : undefined,
-    reminder: selectedReminder.value !== 'Keine' ? selectedReminder.value : undefined,
-    assignee: {
-      id: `usr-${Date.now()}`,
-      name: assigneeConfig.name,
-      initials: assigneeConfig.initials
-    }
-  })
+    createdByUserId: 1,
+    assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
+    assignedTeamId: selectedAssigneeType.value === 'team' ? selectedAssigneeId.value : null,
+    labelIds: [selectedLabelId.value],
+    recurrence: recurrence.value !== 'Keine' ? recurrence.value : null,
+    reminder: selectedReminder.value !== 'Keine' ? { amount: 30, unit: 'minutes' } : null
+  }
 
+  emit('create', payload)
   handleClose()
 }
 </script>
@@ -195,12 +173,12 @@ function handleSubmit() {
 
           <div class="form-group flex-1">
             <label class="form-label">Label</label>
-            <select v-model="selectedLabel" class="form-select">
-              <option value="Schule">Schule</option>
-              <option value="Development">Development</option>
-              <option value="IT">IT</option>
-              <option value="Design">Design</option>
-              <option value="Organisation">Organisation</option>
+            <select v-model="selectedLabelId" class="form-select">
+              <option :value="1">Development</option>
+              <option :value="2">Schule</option>
+              <option :value="3">IT</option>
+              <option :value="4">Design</option>
+              <option :value="5">Organisation</option>
             </select>
           </div>
         </div>
@@ -208,12 +186,20 @@ function handleSubmit() {
         <div class="form-row">
           <div class="form-group flex-1">
             <label class="form-label">Zugewiesen an</label>
-            <select v-model="selectedAssignee" class="form-select">
-              <option value="Liam">Liam</option>
-              <option value="Dmytro">Dmytro</option>
-              <option value="Boris">Boris</option>
-              <option value="Fabio">Fabio</option>
-              <option value="Projektteam">Projektteam</option>
+            <select 
+              :value="`${selectedAssigneeType}:${selectedAssigneeId}`" 
+              class="form-select"
+              @change="(e: Event) => {
+                const val = (e.target as HTMLSelectElement).value.split(':')
+                selectedAssigneeType = val[0] as 'user' | 'team'
+                selectedAssigneeId = Number(val[1])
+              }"
+            >
+              <option value="user:1">Fabio (User)</option>
+              <option value="user:2">Liam (User)</option>
+              <option value="user:3">Dmytro (User)</option>
+              <option value="user:4">Boris (User)</option>
+              <option value="team:1">Projektteam (Team)</option>
             </select>
           </div>
 
