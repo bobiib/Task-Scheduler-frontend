@@ -34,7 +34,8 @@ export interface CreateTaskPayload {
     title: string
     description?: string
     scheduleType: string
-    scheduleDate: string
+    dueDate: string
+    scheduleDate?: string
     dueTime?: string
     createdByUserId: number
     assignedUserId: number | null
@@ -46,3 +47,4 @@ export interface CreateTaskPayload {
         unit: string
     } | null
 }
+

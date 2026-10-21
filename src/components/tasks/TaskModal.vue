@@ -49,19 +49,19 @@ function handleSubmit() {
     dateValue = today.toISOString().slice(0, 10)
   }
 
-  const payload: CreateTaskPayload = {
+    const payload: CreateTaskPayload = {
     title: title.value.trim(),
     description: description.value.trim() || undefined,
     scheduleType: scheduleType.value,
+    dueDate: dateValue,
     scheduleDate: dateValue,
     dueTime: dueTime.value || undefined,
     createdByUserId: 1,
     assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
     assignedTeamId: selectedAssigneeType.value === 'team' ? selectedAssigneeId.value : null,
-    labelIds: [selectedLabelId.value],
-    recurrence: recurrence.value !== 'Keine' ? recurrence.value : null,
-    reminder: selectedReminder.value !== 'Keine' ? { amount: 30, unit: 'minutes' } : null
+    labelIds: [selectedLabelId.value]
   }
+
 
   emit('create', payload)
   handleClose()
