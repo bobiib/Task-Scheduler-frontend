@@ -62,6 +62,31 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
+    async function updateTask(id: number, payload: Partial<CreateTaskPayload>) {
+        error.value = null
+        try {
+            await taskApi.updateTask(id, payload)
+            // A task can have several instances, so reload all cards.
+            await fetchTasks()
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                error.value = err.message
+            }
+        }
+    }
+
+    async function deleteTask(id: number) {
+        error.value = null
+        try {
+            await taskApi.deleteTask(id)
+            tasks.value = tasks.value.filter(t => t.id !== id)
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                error.value = err.message
+            }
+        }
+    }
+
     return {
         tasks,
         loading,
@@ -70,6 +95,8 @@ export const useTaskStore = defineStore('tasks', () => {
         completedTasks,
         fetchTasks,
         toggleTask,
-        addTask
+        addTask,
+        updateTask,
+        deleteTask
     }
 })

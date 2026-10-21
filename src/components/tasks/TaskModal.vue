@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { CreateTaskPayload } from '../../types/task'
+import { ref, watch } from 'vue'
+import type { CreateTaskPayload, Task } from '../../types/task'
+import { useLabelStore } from '../../stores/labelStore'
+import { useTeamStore } from '../../stores/teamStore'
 
 const props = defineProps<{
   isOpen: boolean
+  task?: Task | null
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'create', payload: CreateTaskPayload): void
+  (e: 'update', id: number, payload: Partial<CreateTaskPayload>): void
 }>()
+
+const labelStore = useLabelStore()
+const teamStore = useTeamStore()
 
 const title = ref('')
 const description = ref('')
@@ -21,6 +28,23 @@ const selectedLabelId = ref<number>(2)
 const selectedAssigneeType = ref<'user' | 'team'>('user')
 const selectedAssigneeId = ref<number>(1)
 const selectedReminder = ref('30 Min. vorher')
+
+watch(() => props.isOpen, (open) => {
+  if (!open) return
+  if (labelStore.labels.length === 0) labelStore.fetchLabels()
+  if (teamStore.users.length === 0) teamStore.fetchTeams()
+
+  const task = props.task
+  if (task) {
+    title.value = task.title
+    description.value = task.description || ''
+    dueDate.value = task.dueDate
+    dueTime.value = task.dueTime || ''
+    selectedLabelId.value = task.labels?.[0]?.id ?? selectedLabelId.value
+    selectedAssigneeType.value = task.assignee?.type ?? 'user'
+    selectedAssigneeId.value = task.assignee?.id ?? selectedAssigneeId.value
+  }
+})
 
 function handleClose() {
   resetForm()
@@ -62,8 +86,19 @@ function handleSubmit() {
     labelIds: [selectedLabelId.value]
   }
 
-
-  emit('create', payload)
+  if (props.task) {
+    emit('update', props.task.id, {
+      title: payload.title,
+      description: description.value.trim(),
+      dueDate: payload.dueDate,
+      dueTime: payload.dueTime,
+      assignedUserId: payload.assignedUserId,
+      assignedTeamId: payload.assignedTeamId,
+      labelIds: payload.labelIds
+    })
+  } else {
+    emit('create', payload)
+  }
   handleClose()
 }
 </script>
@@ -73,7 +108,7 @@ function handleSubmit() {
     <div class="modal-card">
       <div class="modal-header">
         <div>
-          <h2 class="modal-title">Neuer Task</h2>
+          <h2 class="modal-title">{{ props.task ? 'Task bearbeiten' : 'Neuer Task' }}</h2>
           <p class="modal-subtitle">Termin, Wiederholung, Labels, User und Reminder definieren.</p>
         </div>
         <button type="button" class="close-btn" @click="handleClose">
@@ -174,11 +209,9 @@ function handleSubmit() {
           <div class="form-group flex-1">
             <label class="form-label">Label</label>
             <select v-model="selectedLabelId" class="form-select">
-              <option :value="1">Development</option>
-              <option :value="2">Schule</option>
-              <option :value="3">IT</option>
-              <option :value="4">Design</option>
-              <option :value="5">Organisation</option>
+              <option v-for="label in labelStore.labels" :key="label.id" :value="label.id">
+                {{ label.name }}
+              </option>
             </select>
           </div>
         </div>
@@ -195,11 +228,12 @@ function handleSubmit() {
                 selectedAssigneeId = Number(val[1])
               }"
             >
-              <option value="user:1">Fabio (User)</option>
-              <option value="user:2">Liam (User)</option>
-              <option value="user:3">Dmytro (User)</option>
-              <option value="user:4">Boris (User)</option>
-              <option value="team:1">Projektteam (Team)</option>
+              <option v-for="user in teamStore.users" :key="`user:${user.id}`" :value="`user:${user.id}`">
+                {{ user.name }} (User)
+              </option>
+              <option v-for="team in teamStore.teams" :key="`team:${team.id}`" :value="`team:${team.id}`">
+                {{ team.name }} (Team)
+              </option>
             </select>
           </div>
 
@@ -222,7 +256,7 @@ function handleSubmit() {
             Abbrechen
           </button>
           <button type="submit" class="btn-primary">
-            Task erstellen
+            {{ props.task ? 'Speichern' : 'Task erstellen' }}
           </button>
         </div>
       </form>

@@ -10,6 +10,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'toggle', instanceId: number): void
+  (e: 'edit', task: Task): void
+  (e: 'delete', id: number): void
 }>()
 
 const primaryLabel = computed<TaskLabel>(() => {
@@ -81,6 +83,8 @@ const primaryLabel = computed<TaskLabel>(() => {
       </div>
 
       <div class="drawer-footer" v-if="task">
+        <button type="button" class="secondary-button" @click="emit('delete', task.id)">Löschen</button>
+        <button type="button" class="secondary-button" @click="emit('edit', task)">Bearbeiten</button>
         <button type="button" class="secondary-button" @click="emit('close')">Schliessen</button>
         <button 
           type="button" 
