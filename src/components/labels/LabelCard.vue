@@ -7,7 +7,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'delete', id: string): void
+  (e: 'delete', id: number): void
 }>()
 </script>
 

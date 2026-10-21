@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import type { Task } from '../../types/task'
+import { computed } from 'vue'
+import type { Task, TaskLabel } from '../../types/task'
 
 const props = defineProps<{
   task: Task
 }>()
 
 const emit = defineEmits<{
-  (e: 'toggle', id: string): void
+  (e: 'toggle', instanceId: number): void
   (e: 'click', task: Task): void
 }>()
+
+const primaryLabel = computed<TaskLabel>(() => {
+  const first = props.task.labels?.[0] || props.task.label
+  if (first) {
+    return first
+  }
+  return { id: 0, name: 'Task', color: 'development' }
+})
+
+
+const isDueToday = computed(() => {
+  const today = new Date().toISOString().slice(0, 10)
+  return props.task.dueDate === today || props.task.dueDate === 'Heute'
+})
 </script>
 
 <template>
@@ -18,15 +33,15 @@ const emit = defineEmits<{
     @click="emit('click', props.task)"
   >
     <div class="card-header">
-      <span class="label-badge" :class="`label-${props.task.label.color}`">
-        {{ props.task.label.name }}
+      <span class="label-badge" :class="`label-${primaryLabel.color}`">
+        {{ primaryLabel.name }}
       </span>
 
       <button 
         type="button" 
         class="checkbox-btn" 
         :class="{ checked: props.task.completed }"
-        @click.stop="emit('toggle', props.task.id)"
+        @click.stop="emit('toggle', props.task.instanceId)"
         aria-label="Toggle task completion"
       >
         <svg v-if="props.task.completed" viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="3" fill="none">
@@ -37,7 +52,7 @@ const emit = defineEmits<{
 
     <h3 class="task-title">{{ props.task.title }}</h3>
 
-    <div class="due-row" :class="{ 'due-today': props.task.isDueToday }">
+    <div class="due-row" :class="{ 'due-today': isDueToday }">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="4" width="18" height="18" rx="2"></rect>
         <line x1="3" y1="10" x2="21" y2="10"></line>
@@ -67,9 +82,9 @@ const emit = defineEmits<{
     <div class="card-footer">
       <div class="assignee-box">
         <div class="assignee-avatar">
-          {{ props.task.assignee.initials }}
+          {{ props.task.assignee?.initials || 'TS' }}
         </div>
-        <span class="assignee-name">{{ props.task.assignee.name }}</span>
+        <span class="assignee-name">{{ props.task.assignee?.name || 'Nicht zugewiesen' }}</span>
       </div>
 
       <button type="button" class="more-btn" @click.stop>

@@ -1,15 +1,26 @@
 <script setup lang="ts">
-import type { Task } from '../../types/task'
+import { computed } from 'vue'
+import type { Task, TaskLabel } from '../../types/task'
 
-defineProps<{
+const props = defineProps<{
   task: Task | null
   isOpen: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'toggle', id: string): void
+  (e: 'toggle', instanceId: number): void
+  (e: 'edit', task: Task): void
+  (e: 'delete', id: number): void
 }>()
+
+const primaryLabel = computed<TaskLabel>(() => {
+  const first = props.task?.labels?.[0] || props.task?.label
+  if (first) {
+    return first
+  }
+  return { id: 0, name: 'Task', color: 'development' }
+})
 </script>
 
 <template>
@@ -17,8 +28,8 @@ const emit = defineEmits<{
     <aside class="drawer">
       <div class="drawer-header">
         <div>
-          <span v-if="task" class="label-badge" :class="`label-${task.label.color}`">
-            {{ task.label.name }}
+          <span v-if="task" class="label-badge" :class="`label-${primaryLabel.color}`">
+            {{ primaryLabel.name }}
           </span>
           <h2 class="drawer-title">{{ task?.title }}</h2>
         </div>
@@ -38,7 +49,7 @@ const emit = defineEmits<{
 
           <div class="detail-item">
             <span class="detail-label">Zugewiesen</span>
-            <strong class="detail-value">{{ task.assignee.name }}</strong>
+            <strong class="detail-value">{{ task.assignee?.name || 'Nicht zugewiesen' }}</strong>
           </div>
 
           <div class="detail-item">
@@ -53,7 +64,9 @@ const emit = defineEmits<{
 
           <div class="detail-item">
             <span class="detail-label">Status</span>
-            <strong class="detail-value">{{ task.completed ? 'Erledigt' : 'Offen' }}</strong>
+            <strong class="detail-value" :class="task.completed ? 'status-done' : 'status-open'">
+              {{ task.completed ? 'Abgeschlossen' : 'Offen' }}
+            </strong>
           </div>
 
           <div class="detail-item">
@@ -64,17 +77,19 @@ const emit = defineEmits<{
           </div>
         </div>
 
-        <div v-if="task.recurrence" class="recurrence-notice">
-          <span>Beim Abschliessen wird nur diese einzelne Instanz als erledigt markiert. Zukünftige Instanzen bleiben offen.</span>
+        <div v-if="task.recurrence" class="recurring-note">
+          Beim Abschliessen wird nur diese einzelne Instanz als erledigt markiert. Zukünftige Instanzen bleiben offen.
         </div>
       </div>
 
       <div class="drawer-footer" v-if="task">
+        <button type="button" class="secondary-button" @click="emit('delete', task.id)">Löschen</button>
+        <button type="button" class="secondary-button" @click="emit('edit', task)">Bearbeiten</button>
         <button type="button" class="secondary-button" @click="emit('close')">Schliessen</button>
         <button 
           type="button" 
           class="primary-button" 
-          @click="emit('toggle', task.id)"
+          @click="emit('toggle', task.instanceId)"
         >
           {{ task.completed ? 'Wieder öffnen' : 'Als erledigt markieren' }}
         </button>
@@ -89,19 +104,20 @@ const emit = defineEmits<{
   inset: 0;
   background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(2px);
-  z-index: 100;
+  z-index: 1200;
   display: flex;
   justify-content: flex-end;
 }
 
 .drawer {
-  width: min(480px, 94vw);
-  height: 100vh;
+  width: 100%;
+  max-width: 480px;
   background: #FFFFFF;
-  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.1);
+  height: 100%;
   display: flex;
   flex-direction: column;
-  animation: slideIn 0.2s ease-out;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.08);
+  animation: slideIn 0.25s ease-out;
 }
 
 @keyframes slideIn {
@@ -110,17 +126,16 @@ const emit = defineEmits<{
 }
 
 .drawer-header {
-  padding: 24px;
-  border-bottom: 1px solid #E2E8F0;
+  padding: 24px 28px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  border-bottom: 1px solid #F1F5F9;
 }
 
 .drawer-title {
   margin-top: 10px;
-  font-size: 1.3rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: #1E293B;
   line-height: 1.3;
@@ -130,108 +145,112 @@ const emit = defineEmits<{
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #F1F5F9;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
   color: #64748B;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.9rem;
-  border: none;
-  cursor: pointer;
 }
 
 .close-button:hover {
-  background: #E2E8F0;
+  background: #F1F5F9;
   color: #1E293B;
 }
 
 .drawer-body {
-  padding: 24px;
-  overflow-y: auto;
+  padding: 28px;
   flex: 1;
+  overflow-y: auto;
 }
 
 .drawer-desc {
   color: #64748B;
-  font-size: 0.88rem;
-  line-height: 1.6;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 24px;
 }
 
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 24px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .detail-item {
-  border: 1px solid #E2E8F0;
   background: #F8FAFC;
+  border: 1px solid #E2E8F0;
   border-radius: 12px;
-  padding: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .detail-label {
-  display: block;
+  font-size: 0.75rem;
   color: #94A3B8;
-  font-size: 0.72rem;
-  text-transform: uppercase;
   font-weight: 600;
-  margin-bottom: 6px;
 }
 
 .detail-value {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: #1E293B;
+  font-weight: 600;
 }
 
-.recurrence-notice {
-  margin-top: 22px;
-  padding: 14px;
-  border-radius: 12px;
+.status-open {
+  color: #D97706;
+}
+
+.status-done {
+  color: #16A34A;
+}
+
+.recurring-note {
   background: #FFFBEB;
-  border: 1px solid #FEF3C7;
+  border: 1px solid #FDE68A;
   color: #B45309;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .drawer-footer {
-  padding: 20px 24px;
-  border-top: 1px solid #E2E8F0;
+  padding: 20px 28px;
+  border-top: 1px solid #F1F5F9;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .secondary-button {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  color: #334155;
+  padding: 10px 16px;
   border-radius: 10px;
-  height: 40px;
-  padding: 0 16px;
-  font-weight: 600;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
   font-size: 0.85rem;
-  cursor: pointer;
+  font-weight: 600;
+  color: #64748B;
 }
 
 .primary-button {
-  background: #5243E0;
-  color: #FFFFFF;
-  border: none;
+  padding: 10px 18px;
   border-radius: 10px;
-  height: 40px;
-  padding: 0 16px;
-  font-weight: 600;
+  background: var(--primary);
+  color: #FFFFFF;
   font-size: 0.85rem;
-  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(82, 67, 224, 0.25);
 }
 
 .label-badge {
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 20px;
 }
 

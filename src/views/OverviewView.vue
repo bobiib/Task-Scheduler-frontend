@@ -1,28 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { Task } from '../types/task'
+import { ref, onMounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
-import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 
 const taskStore = useTaskStore()
 const searchQuery = ref('')
 const currentView = ref<'grid' | 'list'>('grid')
 const isModalOpen = ref(false)
 
-const isDrawerOpen = ref(false)
-const selectedTask = ref<Task | null>(null)
-
-function openDetail(task: Task) {
-  selectedTask.value = task
-  isDrawerOpen.value = true
-}
-
-function closeDrawer() {
-  isDrawerOpen.value = false
-  selectedTask.value = null
-}
+onMounted(() => {
+  taskStore.fetchTasks()
+})
 </script>
 
 <template>
@@ -42,6 +31,11 @@ function closeDrawer() {
       </button>
     </div>
 
+    <div v-if="taskStore.error" class="error-banner">
+      <span>{{ taskStore.error }}</span>
+      <button type="button" class="retry-btn" @click="taskStore.fetchTasks">Wiederholen</button>
+    </div>
+
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-header">
@@ -55,8 +49,8 @@ function closeDrawer() {
           </div>
           <span class="stat-label">Offen</span>
         </div>
-        <div class="stat-value">8</div>
-        <div class="stat-desc">2 neu seit gestern</div>
+        <div class="stat-value">{{ taskStore.openTasks.length }}</div>
+        <div class="stat-desc">Aktuell offen</div>
       </div>
 
       <div class="stat-card">
@@ -69,8 +63,10 @@ function closeDrawer() {
           </div>
           <span class="stat-label">Heute fällig</span>
         </div>
-        <div class="stat-value">3</div>
-        <div class="stat-desc">Nächster um 14:00</div>
+        <div class="stat-value">
+          {{ taskStore.tasks.filter(t => t.dueDate === 'Heute' || t.dueDate === new Date().toISOString().slice(0, 10)).length }}
+        </div>
+        <div class="stat-desc">Fällig heute</div>
       </div>
 
       <div class="stat-card">
@@ -83,8 +79,8 @@ function closeDrawer() {
           </div>
           <span class="stat-label">Diese Woche</span>
         </div>
-        <div class="stat-value">12</div>
-        <div class="stat-desc">Bis Freitag geplant</div>
+        <div class="stat-value">{{ taskStore.tasks.length }}</div>
+        <div class="stat-desc">Geplant</div>
       </div>
 
       <div class="stat-card">
@@ -96,8 +92,8 @@ function closeDrawer() {
           </div>
           <span class="stat-label">Erledigt</span>
         </div>
-        <div class="stat-value">24</div>
-        <div class="stat-desc stat-trend">+18% diese Woche</div>
+        <div class="stat-value">{{ taskStore.completedTasks.length }}</div>
+        <div class="stat-desc stat-trend">Abgeschlossen</div>
       </div>
     </div>
 
@@ -169,13 +165,21 @@ function closeDrawer() {
       <span class="tasks-count">{{ taskStore.openTasks.length }} offen</span>
     </div>
 
-    <div class="tasks-grid">
+    <div v-if="taskStore.loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>Tasks werden geladen...</span>
+    </div>
+
+    <div v-else-if="taskStore.tasks.length === 0" class="empty-state">
+      <p>Keine Tasks gefunden. Erstelle jetzt deinen ersten Task!</p>
+    </div>
+
+    <div v-else class="tasks-grid">
       <TaskCard 
         v-for="task in taskStore.tasks" 
-        :key="task.id" 
+        :key="task.instanceId" 
         :task="task" 
         @toggle="taskStore.toggleTask"
-        @click="openDetail"
       />
     </div>
 
@@ -183,13 +187,6 @@ function closeDrawer() {
       :is-open="isModalOpen" 
       @close="isModalOpen = false" 
       @create="taskStore.addTask"
-    />
-
-    <TaskDetailDrawer 
-      :is-open="isDrawerOpen" 
-      :task="selectedTask" 
-      @close="closeDrawer" 
-      @toggle="taskStore.toggleTask" 
     />
   </div>
 </template>
@@ -237,6 +234,27 @@ function closeDrawer() {
 .btn-primary:hover {
   background-color: var(--primary-hover);
   box-shadow: 0 6px 20px rgba(82, 67, 224, 0.4);
+}
+
+.error-banner {
+  background-color: #FEF2F2;
+  border: 1px solid #FCA5A5;
+  color: #B91C1C;
+  padding: 12px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.retry-btn {
+  background-color: #EF4444;
+  color: #FFFFFF;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
 }
 
 .stats-grid {
@@ -422,5 +440,34 @@ function closeDrawer() {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.loading-state,
+.empty-state {
+  background: #FFFFFF;
+  border: 1px dashed #CBD5E1;
+  border-radius: 16px;
+  padding: 48px;
+  text-align: center;
+  color: #64748B;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #E2E8F0;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

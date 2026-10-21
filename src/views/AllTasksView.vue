@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Task } from '../types/task'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
+import TaskModal from '../components/tasks/TaskModal.vue'
 
 const taskStore = useTaskStore()
 const searchQuery = ref('')
@@ -12,6 +13,11 @@ const viewMode = ref<'grid' | 'table'>('grid')
 
 const isDrawerOpen = ref(false)
 const selectedTask = ref<Task | null>(null)
+const editingTask = ref<Task | null>(null)
+
+onMounted(() => {
+  taskStore.fetchTasks()
+})
 
 function openDetail(task: Task) {
   selectedTask.value = task
@@ -21,6 +27,17 @@ function openDetail(task: Task) {
 function closeDrawer() {
   isDrawerOpen.value = false
   selectedTask.value = null
+}
+
+function editTask(task: Task) {
+  closeDrawer()
+  editingTask.value = task
+}
+
+function deleteTask(id: number) {
+  if (!confirm('Task wirklich löschen?')) return
+  closeDrawer()
+  taskStore.deleteTask(id)
 }
 
 const filteredTasks = computed(() => {
@@ -53,6 +70,8 @@ const filteredTasks = computed(() => {
       </div>
       <button type="button" class="primary-button">＋ Neuer Task</button>
     </div>
+
+    <p v-if="taskStore.error" class="error-message">{{ taskStore.error }}</p>
 
     <div class="alltasks-summary">
       <div class="summary-left">
@@ -137,7 +156,9 @@ const filteredTasks = computed(() => {
           <div class="task-cell-main">
             <div class="task-row-title">{{ t.title }}</div>
             <div class="task-row-sub">
-              <span class="label-badge" :class="`label-${t.label.color}`">{{ t.label.name }}</span>
+              <span class="label-badge" :class="`label-${(t.labels?.[0] || t.label)?.color || 'development'}`">
+                {{ (t.labels?.[0] || t.label)?.name || 'Task' }}
+              </span>
               <span v-if="t.reminder" class="row-meta">♢ {{ t.reminder }}</span>
             </div>
           </div>
@@ -170,7 +191,7 @@ const filteredTasks = computed(() => {
               type="button" 
               class="row-check-button" 
               :class="{ checked: t.completed }"
-              @click.stop="taskStore.toggleTask(t.id)"
+              @click.stop="taskStore.toggleTask(t.instanceId)"
               title="Status ändern"
             >
               ✓
@@ -183,8 +204,17 @@ const filteredTasks = computed(() => {
     <TaskDetailDrawer 
       :is-open="isDrawerOpen" 
       :task="selectedTask" 
-      @close="closeDrawer" 
-      @toggle="taskStore.toggleTask" 
+      @close="closeDrawer"
+      @toggle="taskStore.toggleTask"
+      @edit="editTask"
+      @delete="deleteTask"
+    />
+
+    <TaskModal
+      :is-open="editingTask !== null"
+      :task="editingTask"
+      @close="editingTask = null"
+      @update="taskStore.updateTask"
     />
   </div>
 </template>
@@ -193,6 +223,12 @@ const filteredTasks = computed(() => {
 .all-tasks-page {
   max-width: 1300px;
   margin: 0 auto;
+}
+
+.error-message {
+  color: #E11D48;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
 }
 
 .page-header {
