@@ -12,6 +12,7 @@ const selectedStatus = ref('Alle')
 const viewMode = ref<'grid' | 'table'>('grid')
 
 const isDrawerOpen = ref(false)
+const isCreateModalOpen = ref(false)
 const selectedTask = ref<Task | null>(null)
 const editingTask = ref<Task | null>(null)
 
@@ -68,7 +69,7 @@ const filteredTasks = computed(() => {
         <h1 class="page-title">Alle Tasks</h1>
         <p class="page-subtitle">Alle einmaligen und wiederkehrenden Tasks zentral verwalten.</p>
       </div>
-      <button type="button" class="primary-button">＋ Neuer Task</button>
+      <button type="button" class="primary-button" @click="isCreateModalOpen = true">＋ Neuer Task</button>
     </div>
 
     <p v-if="taskStore.error" class="error-message">{{ taskStore.error }}</p>
@@ -211,9 +212,10 @@ const filteredTasks = computed(() => {
     />
 
     <TaskModal
-      :is-open="editingTask !== null"
+      :is-open="isCreateModalOpen || editingTask !== null"
       :task="editingTask"
-      @close="editingTask = null"
+      @close="isCreateModalOpen = false; editingTask = null"
+      @create="taskStore.addTask"
       @update="taskStore.updateTask"
     />
   </div>
