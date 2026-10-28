@@ -27,7 +27,57 @@ const recurrence = ref('Keine')
 const selectedLabelId = ref<number>(2)
 const selectedAssigneeType = ref<'user' | 'team'>('user')
 const selectedAssigneeId = ref<number>(1)
-const selectedReminder = ref('30 Min. vorher')
+
+const selectedReminderPreset = ref('30_minutes')
+const customReminderAmount = ref(30)
+const customReminderUnit = ref<'minutes' | 'hours' | 'days' | 'weeks'>('minutes')
+
+function parseReminder(reminderStr?: string | null) {
+  if (!reminderStr || reminderStr === 'Keine' || reminderStr === 'Kein Reminder') {
+    selectedReminderPreset.value = 'none'
+    return
+  }
+
+  const match = reminderStr.match(/^(\d+)\s+(Min\.|Std\.|Tag|Tage|Woche|Wochen)\s+vorher$/i)
+  if (match && match[1] && match[2]) {
+    const amount = Number(match[1])
+    const unitRaw = match[2].toLowerCase()
+    let unit: 'minutes' | 'hours' | 'days' | 'weeks' = 'minutes'
+    if (unitRaw.startsWith('min')) unit = 'minutes'
+    else if (unitRaw.startsWith('std')) unit = 'hours'
+    else if (unitRaw.startsWith('tag')) unit = 'days'
+    else if (unitRaw.startsWith('woch')) unit = 'weeks'
+
+    const presetKey = `${amount}_${unit}`
+    const knownPresets = ['15_minutes', '30_minutes', '1_hours', '2_hours', '1_days', '2_days', '3_days', '1_weeks']
+    if (knownPresets.includes(presetKey)) {
+      selectedReminderPreset.value = presetKey
+    } else {
+      selectedReminderPreset.value = 'custom'
+      customReminderAmount.value = amount
+      customReminderUnit.value = unit
+    }
+  } else {
+    selectedReminderPreset.value = 'custom'
+  }
+}
+
+function getReminderPayload(): { amount: number; unit: string } | null {
+  if (selectedReminderPreset.value === 'none') {
+    return null
+  }
+  if (selectedReminderPreset.value === 'custom') {
+    return {
+      amount: Math.max(1, Number(customReminderAmount.value) || 1),
+      unit: customReminderUnit.value
+    }
+  }
+  const parts = selectedReminderPreset.value.split('_')
+  return {
+    amount: Number(parts[0]) || 30,
+    unit: parts[1] || 'minutes'
+  }
+}
 
 watch(() => props.isOpen, (open) => {
   if (!open) return
@@ -43,6 +93,7 @@ watch(() => props.isOpen, (open) => {
     selectedLabelId.value = task.labels?.[0]?.id ?? selectedLabelId.value
     selectedAssigneeType.value = task.assignee?.type ?? 'user'
     selectedAssigneeId.value = task.assignee?.id ?? selectedAssigneeId.value
+    parseReminder(task.reminder)
   }
 })
 
@@ -61,7 +112,9 @@ function resetForm() {
   selectedLabelId.value = 2
   selectedAssigneeType.value = 'user'
   selectedAssigneeId.value = 1
-  selectedReminder.value = '30 Min. vorher'
+  selectedReminderPreset.value = 'none'
+  customReminderAmount.value = 30
+  customReminderUnit.value = 'minutes'
 }
 
 function handleSubmit() {
@@ -73,7 +126,9 @@ function handleSubmit() {
     dateValue = today.toISOString().slice(0, 10)
   }
 
-    const payload: CreateTaskPayload = {
+  const reminderData = getReminderPayload()
+
+  const payload: CreateTaskPayload = {
     title: title.value.trim(),
     description: description.value.trim() || undefined,
     scheduleType: scheduleType.value,
@@ -83,7 +138,8 @@ function handleSubmit() {
     createdByUserId: 1,
     assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
     assignedTeamId: selectedAssigneeType.value === 'team' ? selectedAssigneeId.value : null,
-    labelIds: [selectedLabelId.value]
+    labelIds: [selectedLabelId.value],
+    reminder: reminderData
   }
 
   if (props.task) {
@@ -94,7 +150,8 @@ function handleSubmit() {
       dueTime: payload.dueTime,
       assignedUserId: payload.assignedUserId,
       assignedTeamId: payload.assignedTeamId,
-      labelIds: payload.labelIds
+      labelIds: payload.labelIds,
+      reminder: reminderData
     })
   } else {
     emit('create', payload)
@@ -238,16 +295,45 @@ function handleSubmit() {
           </div>
 
           <div class="form-group flex-1">
-            <label class="form-label">Reminder</label>
-            <select v-model="selectedReminder" class="form-select">
-              <option value="Keine">Keine</option>
-              <option value="15 Min. vorher">15 Min. vorher</option>
-              <option value="30 Min. vorher">30 Min. vorher</option>
-              <option value="1 Std. vorher">1 Std. vorher</option>
-              <option value="1 Tag vorher">1 Tag vorher</option>
-              <option value="3 Tage vorher">3 Tage vorher</option>
-              <option value="1 Woche vorher">1 Woche vorher</option>
+            <label class="form-label reminder-label">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span>Reminder</span>
+            </label>
+            <select v-model="selectedReminderPreset" class="form-select">
+              <option value="none">Kein Reminder</option>
+              <option value="15_minutes">15 Min. vorher</option>
+              <option value="30_minutes">30 Min. vorher</option>
+              <option value="1_hours">1 Std. vorher</option>
+              <option value="2_hours">2 Std. vorher</option>
+              <option value="1_days">1 Tag vorher</option>
+              <option value="2_days">2 Tage vorher</option>
+              <option value="3_days">3 Tage vorher</option>
+              <option value="1_weeks">1 Woche vorher</option>
+              <option value="custom">Benutzerdefiniert...</option>
             </select>
+          </div>
+        </div>
+
+        <div v-if="selectedReminderPreset === 'custom'" class="custom-reminder-box">
+          <div class="custom-reminder-inputs">
+            <input 
+              v-model.number="customReminderAmount" 
+              type="number" 
+              min="1" 
+              max="999" 
+              class="form-input custom-amount" 
+              placeholder="30"
+            />
+            <select v-model="customReminderUnit" class="form-select custom-unit">
+              <option value="minutes">Minuten</option>
+              <option value="hours">Stunden</option>
+              <option value="days">Tage</option>
+              <option value="weeks">Wochen</option>
+            </select>
+            <span class="custom-suffix">vorher</span>
           </div>
         </div>
 
@@ -352,6 +438,40 @@ function handleSubmit() {
   font-size: 0.82rem;
   font-weight: 600;
   color: #475569;
+}
+
+.reminder-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-reminder-box {
+  background: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.custom-reminder-inputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-amount {
+  width: 90px;
+}
+
+.custom-unit {
+  flex: 1;
+}
+
+.custom-suffix {
+  font-size: 0.85rem;
+  color: #64748B;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .form-input,
