@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { CreateTaskPayload, Task } from '../../types/task'
+import type { CreateTaskPayload, Task, RecurrenceRule } from '../../types/task'
 import { useLabelStore } from '../../stores/labelStore'
 import { useTeamStore } from '../../stores/teamStore'
 
@@ -23,7 +23,31 @@ const description = ref('')
 const dueDate = ref('')
 const dueTime = ref('12:00')
 const scheduleType = ref('date')
-const recurrence = ref('Keine')
+
+// Wiederholungs-State
+const recurrenceType = ref<'none' | 'daily' | 'weekly' | 'monthly_day'>('none')
+const selectedWeekdays = ref<number[]>([]) // 1 = Mo, 2 = Di, ..., 7 = So
+const recurrenceEndDate = ref('')
+
+const weekdaysList = [
+  { id: 1, label: 'Mo' },
+  { id: 2, label: 'Di' },
+  { id: 3, label: 'Mi' },
+  { id: 4, label: 'Do' },
+  { id: 5, label: 'Fr' },
+  { id: 6, label: 'Sa' },
+  { id: 7, label: 'So' }
+]
+
+function toggleWeekday(day: number) {
+  const index = selectedWeekdays.value.indexOf(day)
+  if (index === -1) {
+    selectedWeekdays.value.push(day)
+  } else {
+    selectedWeekdays.value.splice(index, 1)
+  }
+}
+
 const selectedLabelId = ref<number>(2)
 const selectedAssigneeType = ref<'user' | 'team'>('user')
 const selectedAssigneeId = ref<number>(1)
@@ -79,6 +103,55 @@ function getReminderPayload(): { amount: number; unit: string } | null {
   }
 }
 
+function parseRecurrence(rec?: any) {
+  if (!rec || rec === 'Keine') {
+    recurrenceType.value = 'none'
+    selectedWeekdays.value = []
+    recurrenceEndDate.value = ''
+    return
+  }
+
+  if (typeof rec === 'object') {
+    recurrenceType.value = rec.type || 'none'
+    selectedWeekdays.value = rec.weekdays ? [...rec.weekdays] : []
+    recurrenceEndDate.value = rec.endDate || ''
+    return
+  }
+
+  if (rec === 'Täglich' || rec === 'daily') recurrenceType.value = 'daily'
+  else if (rec === 'Wöchentlich' || rec === 'weekly') recurrenceType.value = 'weekly'
+  else if (rec === 'Monatlich' || rec.startsWith('monthly')) recurrenceType.value = 'monthly_day'
+  else recurrenceType.value = 'none'
+}
+
+function getRecurrencePayload(): RecurrenceRule | null {
+  if (recurrenceType.value === 'none') {
+    return null
+  }
+  if (recurrenceType.value === 'daily') {
+    return {
+      type: 'daily',
+      endDate: recurrenceEndDate.value || null
+    }
+  }
+  if (recurrenceType.value === 'weekly') {
+    return {
+      type: 'weekly',
+      weekdays: selectedWeekdays.value.length > 0 ? [...selectedWeekdays.value].sort() : undefined,
+      endDate: recurrenceEndDate.value || null
+    }
+  }
+  if (recurrenceType.value === 'monthly_day') {
+    const day = dueDate.value ? new Date(dueDate.value).getDate() : 1
+    return {
+      type: 'monthly_day',
+      dayOfMonth: day,
+      endDate: recurrenceEndDate.value || null
+    }
+  }
+  return null
+}
+
 watch(() => props.isOpen, (open) => {
   if (!open) return
   if (labelStore.labels.length === 0) labelStore.fetchLabels()
@@ -94,6 +167,7 @@ watch(() => props.isOpen, (open) => {
     selectedAssigneeType.value = task.assignee?.type ?? 'user'
     selectedAssigneeId.value = task.assignee?.id ?? selectedAssigneeId.value
     parseReminder(task.reminder)
+    parseRecurrence((task as any).recurrenceRule || task.recurrence)
   }
 })
 
@@ -108,7 +182,9 @@ function resetForm() {
   dueDate.value = ''
   dueTime.value = '12:00'
   scheduleType.value = 'date'
-  recurrence.value = 'Keine'
+  recurrenceType.value = 'none'
+  selectedWeekdays.value = []
+  recurrenceEndDate.value = ''
   selectedLabelId.value = 2
   selectedAssigneeType.value = 'user'
   selectedAssigneeId.value = 1
@@ -127,6 +203,7 @@ function handleSubmit() {
   }
 
   const reminderData = getReminderPayload()
+  const recurrenceData = getRecurrencePayload()
 
   const payload: CreateTaskPayload = {
     title: title.value.trim(),
@@ -139,7 +216,8 @@ function handleSubmit() {
     assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
     assignedTeamId: selectedAssigneeType.value === 'team' ? selectedAssigneeId.value : null,
     labelIds: [selectedLabelId.value],
-    reminder: reminderData
+    reminder: reminderData,
+    recurrence: recurrenceData
   }
 
   if (props.task) {
@@ -151,7 +229,8 @@ function handleSubmit() {
       assignedUserId: payload.assignedUserId,
       assignedTeamId: payload.assignedTeamId,
       labelIds: payload.labelIds,
-      reminder: reminderData
+      reminder: reminderData,
+      recurrence: recurrenceData
     })
   } else {
     emit('create', payload)
@@ -255,11 +334,11 @@ function handleSubmit() {
         <div class="form-row">
           <div class="form-group flex-1">
             <label class="form-label">Wiederholung</label>
-            <select v-model="recurrence" class="form-select">
-              <option value="Keine">Keine</option>
-              <option value="Täglich">Täglich</option>
-              <option value="Wöchentlich">Wöchentlich</option>
-              <option value="Monatlich">Monatlich</option>
+            <select v-model="recurrenceType" class="form-select">
+              <option value="none">Keine</option>
+              <option value="daily">Täglich</option>
+              <option value="weekly">Wöchentlich</option>
+              <option value="monthly_day">Monatlich</option>
             </select>
           </div>
 
@@ -270,6 +349,37 @@ function handleSubmit() {
                 {{ label.name }}
               </option>
             </select>
+          </div>
+        </div>
+
+        <!-- Details für Wöchentlich: Wochentage auswählen -->
+        <div v-if="recurrenceType === 'weekly'" class="recurrence-box">
+          <label class="form-label-sub">Wiederholen an folgenden Wochentagen:</label>
+          <div class="weekday-buttons">
+            <button
+              v-for="day in weekdaysList"
+              :key="day.id"
+              type="button"
+              class="weekday-btn"
+              :class="{ active: selectedWeekdays.includes(day.id) }"
+              @click="toggleWeekday(day.id)"
+            >
+              {{ day.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Optionales Enddatum für Wiederholungen -->
+        <div v-if="recurrenceType !== 'none'" class="recurrence-box">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label-sub">Endet am (optional)</label>
+              <input 
+                v-model="recurrenceEndDate" 
+                type="date" 
+                class="form-input" 
+              />
+            </div>
           </div>
         </div>
 
@@ -559,4 +669,54 @@ function handleSubmit() {
   background: var(--primary-hover);
   box-shadow: 0 6px 20px rgba(82, 67, 224, 0.4);
 }
+
+.recurrence-box {
+  background: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.form-label-sub {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 8px;
+}
+
+.weekday-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.weekday-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weekday-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.weekday-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(82, 67, 224, 0.25);
+}
+
 </style>

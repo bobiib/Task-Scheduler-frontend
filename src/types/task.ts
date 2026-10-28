@@ -21,7 +21,7 @@ export interface Task {
     dueDate: string
     dueTime?: string | null
     scheduleType: string
-    recurrence?: string | null
+    recurrence?: RecurrenceRule | string | null
     reminder?: string | null
     labels: TaskLabel[]
     label?: TaskLabel
@@ -41,10 +41,23 @@ export interface CreateTaskPayload {
     assignedUserId: number | null
     assignedTeamId: number | null
     labelIds: number[]
-    recurrence?: string | null
+    recurrence?: RecurrenceRule | null
     reminder?: {
         amount: number
         unit: string
     } | null
+}
+
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly_day' | 'monthly_weekday' | 'yearly'
+
+export interface RecurrenceRule {
+    type: RecurrenceType
+    startDate?: string | null
+    endDate?: string | null
+    weekdays?: number[]
+    dayOfMonth?: number
+    weekOfMonth?: number
+    weekday?: number
+    monthOfYear?: number
 }
 
