@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { CreateTaskPayload, Task, RecurrenceRule } from '../../types/task'
 import { useLabelStore } from '../../stores/labelStore'
 import { useTeamStore } from '../../stores/teamStore'
@@ -22,7 +22,158 @@ const title = ref('')
 const description = ref('')
 const dueDate = ref('')
 const dueTime = ref('12:00')
-const scheduleType = ref('date')
+
+// Erweiterte Terminierungsarten
+const scheduleType = ref<'date' | 'week' | 'weekday_in_month'>('date')
+const currentYear = new Date().getFullYear()
+const scheduleYear = ref<number>(currentYear)
+const scheduleMonth = ref<number>(new Date().getMonth() + 1)
+const scheduleWeekOfMonth = ref<number>(1)
+const scheduleWeekday = ref<number>(1) // 1 = Mo, ..., 7 = So
+
+const monthList = [
+  { id: 1, name: 'Januar' },
+  { id: 2, name: 'Februar' },
+  { id: 3, name: 'März' },
+  { id: 4, name: 'April' },
+  { id: 5, name: 'Mai' },
+  { id: 6, name: 'Juni' },
+  { id: 7, name: 'Juli' },
+  { id: 8, name: 'August' },
+  { id: 9, name: 'September' },
+  { id: 10, name: 'Oktober' },
+  { id: 11, name: 'November' },
+  { id: 12, name: 'Dezember' }
+]
+
+const weekOfMonthList = [
+  { id: 1, label: '1. Woche' },
+  { id: 2, label: '2. Woche' },
+  { id: 3, label: '3. Woche' },
+  { id: 4, label: '4. Woche' },
+  { id: 5, label: '5. Woche' }
+]
+
+const ordinalList = [
+  { id: 1, label: '1. (Erster)' },
+  { id: 2, label: '2. (Zweiter)' },
+  { id: 3, label: '3. (Dritter)' },
+  { id: 4, label: '4. (Vierter)' },
+  { id: 5, label: '5. (Fünfter)' }
+]
+
+const fullWeekdayList = [
+  { id: 1, label: 'Montag' },
+  { id: 2, label: 'Dienstag' },
+  { id: 3, label: 'Mittwoch' },
+  { id: 4, label: 'Donnerstag' },
+  { id: 5, label: 'Freitag' },
+  { id: 6, label: 'Samstag' },
+  { id: 7, label: 'Sonntag' }
+]
+
+const yearOptions = computed(() => {
+  const years = []
+  for (let y = currentYear - 1; y <= currentYear + 4; y++) {
+    years.push(y)
+  }
+  return years
+})
+
+// Berechnung des konkreten Fälligkeitsdatums gemäss Pflichtenheft
+function calculateDateFromSchedule(): string {
+  if (scheduleType.value === 'date') {
+    return dueDate.value
+  }
+
+  const y = scheduleYear.value
+  const m = scheduleMonth.value // 1-12
+  const daysInMonth = new Date(y, m, 0).getDate()
+
+  if (scheduleType.value === 'week') {
+    // "Standardmässig der letzte Tag dieser Woche um 23:59 Uhr" -> Sonntag (ISO 7)
+    const targetWk = scheduleWeekOfMonth.value
+    let matchingDay: number | null = null
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, m - 1, d)
+      const isoWk = dt.getDay() || 7
+      if (Math.ceil(d / 7) === targetWk && isoWk === 7) {
+        matchingDay = d
+        break
+      }
+    }
+
+    if (!matchingDay) {
+      // Falls in der 5. Woche kein Sonntag mehr liegt, den letzten Tag der Woche im Monat nehmen
+      for (let d = daysInMonth; d >= 1; d--) {
+        if (Math.ceil(d / 7) === targetWk) {
+          matchingDay = d
+          break
+        }
+      }
+    }
+    if (!matchingDay) matchingDay = Math.min(daysInMonth, targetWk * 7)
+
+    const mm = String(m).padStart(2, '0')
+    const dd = String(matchingDay).padStart(2, '0')
+    return `${y}-${mm}-${dd}`
+  }
+
+  if (scheduleType.value === 'weekday_in_month') {
+    // z. B. 3. Donnerstag
+    const targetWk = scheduleWeekOfMonth.value
+    const targetWkday = scheduleWeekday.value
+    let matchingDay: number | null = null
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(y, m - 1, d)
+      const isoWk = dt.getDay() || 7
+      if (Math.ceil(d / 7) === targetWk && isoWk === targetWkday) {
+        matchingDay = d
+        break
+      }
+    }
+
+    if (!matchingDay) {
+      // Fallback falls es z. B. keinen 5. Donnerstag gibt
+      matchingDay = Math.min(daysInMonth, (targetWk - 1) * 7 + 1)
+    }
+
+    const mm = String(m).padStart(2, '0')
+    const dd = String(matchingDay).padStart(2, '0')
+    return `${y}-${mm}-${dd}`
+  }
+
+  return dueDate.value
+}
+
+// Watcher für automatische Neuberechnung bei Änderung der Planungsangaben
+watch(
+  [scheduleType, scheduleYear, scheduleMonth, scheduleWeekOfMonth, scheduleWeekday],
+  ([newType]) => {
+    if (newType !== 'date') {
+      dueDate.value = calculateDateFromSchedule()
+      if (newType === 'week' && (!dueTime.value || dueTime.value === '12:00')) {
+        dueTime.value = '23:59'
+      }
+    }
+  }
+)
+
+const calculatedDueDateFormatted = computed(() => {
+  if (!dueDate.value) return ''
+  const parts = dueDate.value.split('-')
+  if (parts.length !== 3) return dueDate.value
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+  const dateStr = d.toLocaleDateString('de-CH', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  })
+  return `${dateStr}${dueTime.value ? ` um ${dueTime.value} Uhr` : ''}`
+})
 
 // Wiederholungs-State
 const recurrenceType = ref<'none' | 'daily' | 'weekly' | 'monthly_day'>('none')
@@ -162,7 +313,25 @@ watch(() => props.isOpen, (open) => {
     title.value = task.title
     description.value = task.description || ''
     dueDate.value = task.dueDate
-    dueTime.value = task.dueTime || ''
+    dueTime.value = task.dueTime || '12:00'
+    
+    // Terminierungsart übernehmen
+    if (task.scheduleType === 'weekday' || task.scheduleType === 'weekday_in_month') {
+      scheduleType.value = 'weekday_in_month'
+    } else if (task.scheduleType === 'week') {
+      scheduleType.value = 'week'
+    } else {
+      scheduleType.value = 'date'
+    }
+
+    if (task.dueDate) {
+      const d = new Date(task.dueDate)
+      scheduleYear.value = task.scheduleYear ?? d.getFullYear()
+      scheduleMonth.value = task.scheduleMonth ?? (d.getMonth() + 1)
+      scheduleWeekOfMonth.value = task.scheduleWeekOfMonth ?? Math.ceil(d.getDate() / 7)
+      scheduleWeekday.value = task.scheduleWeekday ?? (d.getDay() || 7)
+    }
+
     selectedLabelId.value = task.labels?.[0]?.id ?? selectedLabelId.value
     selectedAssigneeType.value = task.assignee?.type ?? 'user'
     selectedAssigneeId.value = task.assignee?.id ?? selectedAssigneeId.value
@@ -182,6 +351,10 @@ function resetForm() {
   dueDate.value = ''
   dueTime.value = '12:00'
   scheduleType.value = 'date'
+  scheduleYear.value = currentYear
+  scheduleMonth.value = new Date().getMonth() + 1
+  scheduleWeekOfMonth.value = 1
+  scheduleWeekday.value = 1
   recurrenceType.value = 'none'
   selectedWeekdays.value = []
   recurrenceEndDate.value = ''
@@ -197,6 +370,9 @@ function handleSubmit() {
   if (!title.value.trim()) return
 
   let dateValue = dueDate.value
+  if (!dateValue || scheduleType.value !== 'date') {
+    dateValue = calculateDateFromSchedule()
+  }
   if (!dateValue) {
     const today = new Date()
     dateValue = today.toISOString().slice(0, 10)
@@ -211,6 +387,10 @@ function handleSubmit() {
     scheduleType: scheduleType.value,
     dueDate: dateValue,
     scheduleDate: dateValue,
+    scheduleYear: scheduleType.value !== 'date' ? scheduleYear.value : null,
+    scheduleMonth: scheduleType.value !== 'date' ? scheduleMonth.value : null,
+    scheduleWeekOfMonth: scheduleType.value !== 'date' ? scheduleWeekOfMonth.value : null,
+    scheduleWeekday: scheduleType.value === 'weekday_in_month' ? scheduleWeekday.value : null,
     dueTime: dueTime.value || undefined,
     createdByUserId: 1,
     assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
@@ -224,8 +404,13 @@ function handleSubmit() {
     emit('update', props.task.id, {
       title: payload.title,
       description: description.value.trim(),
+      scheduleType: payload.scheduleType,
       dueDate: payload.dueDate,
       dueTime: payload.dueTime,
+      scheduleYear: payload.scheduleYear,
+      scheduleMonth: payload.scheduleMonth,
+      scheduleWeekOfMonth: payload.scheduleWeekOfMonth,
+      scheduleWeekday: payload.scheduleWeekday,
       assignedUserId: payload.assignedUserId,
       assignedTeamId: payload.assignedTeamId,
       labelIds: payload.labelIds,
@@ -245,7 +430,7 @@ function handleSubmit() {
       <div class="modal-header">
         <div>
           <h2 class="modal-title">{{ props.task ? 'Task bearbeiten' : 'Neuer Task' }}</h2>
-          <p class="modal-subtitle">Termin, Wiederholung, Labels, User und Reminder definieren.</p>
+          <p class="modal-subtitle">Terminierung, Wiederholung, Labels, User und Reminder definieren.</p>
         </div>
         <button type="button" class="close-btn" @click="handleClose">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -276,26 +461,7 @@ function handleSubmit() {
           ></textarea>
         </div>
 
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label class="form-label">Termin</label>
-            <input 
-              v-model="dueDate" 
-              type="date" 
-              class="form-input" 
-            />
-          </div>
-
-          <div class="form-group flex-1">
-            <label class="form-label">Uhrzeit</label>
-            <input 
-              v-model="dueTime" 
-              type="time" 
-              class="form-input" 
-            />
-          </div>
-        </div>
-
+        <!-- Terminierungsart -->
         <div class="form-group">
           <label class="form-label">Terminierungsart</label>
           <div class="radio-group">
@@ -324,13 +490,113 @@ function handleSubmit() {
                 v-model="scheduleType" 
                 type="radio" 
                 name="scheduleType" 
-                value="weekday" 
+                value="weekday_in_month" 
               />
               <span>Wochentag im Monat, z. B. 3. Donnerstag</span>
             </label>
           </div>
         </div>
 
+        <!-- 1. Terminierungsart: Bestimmtes Datum -->
+        <div v-if="scheduleType === 'date'" class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label">Termin</label>
+            <input 
+              v-model="dueDate" 
+              type="date" 
+              class="form-input" 
+            />
+          </div>
+
+          <div class="form-group flex-1">
+            <label class="form-label">Uhrzeit</label>
+            <input 
+              v-model="dueTime" 
+              type="time" 
+              class="form-input" 
+            />
+          </div>
+        </div>
+
+        <!-- 2. Terminierungsart: Bestimmte Woche -->
+        <div v-else-if="scheduleType === 'week'" class="schedule-details-box">
+          <label class="form-label-sub">Kalenderwoche festlegen</label>
+          <div class="form-row schedule-inputs-row">
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Jahr</label>
+              <select v-model.number="scheduleYear" class="form-select">
+                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Monat</label>
+              <select v-model.number="scheduleMonth" class="form-select">
+                <option v-for="m in monthList" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Woche im Monat</label>
+              <select v-model.number="scheduleWeekOfMonth" class="form-select">
+                <option v-for="w in weekOfMonthList" :key="w.id" :value="w.id">{{ w.label }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Uhrzeit</label>
+              <input v-model="dueTime" type="time" class="form-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Terminierungsart: Wochentag im Monat -->
+        <div v-else-if="scheduleType === 'weekday_in_month'" class="schedule-details-box">
+          <label class="form-label-sub">Wochentag im Monat festlegen</label>
+          <div class="form-row schedule-inputs-row">
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Jahr</label>
+              <select v-model.number="scheduleYear" class="form-select">
+                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Monat</label>
+              <select v-model.number="scheduleMonth" class="form-select">
+                <option v-for="m in monthList" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Welcher</label>
+              <select v-model.number="scheduleWeekOfMonth" class="form-select">
+                <option v-for="o in ordinalList" :key="o.id" :value="o.id">{{ o.label }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Wochentag</label>
+              <select v-model.number="scheduleWeekday" class="form-select">
+                <option v-for="d in fullWeekdayList" :key="d.id" :value="d.id">{{ d.label }}</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label-mini">Uhrzeit</label>
+              <input v-model="dueTime" type="time" class="form-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Fälligkeits-Vorschau Banner gemäss Pflichtenheft-Kriterium -->
+        <div v-if="calculatedDueDateFormatted" class="calculated-preview-box">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          <div>
+            <span class="preview-text-label">Berechnete Fälligkeit:</span>
+            <strong class="preview-text-value">{{ calculatedDueDateFormatted }}</strong>
+          </div>
+        </div>
+
+        <!-- Wiederholung & Label -->
         <div class="form-row">
           <div class="form-group flex-1">
             <label class="form-label">Wiederholung</label>
@@ -469,61 +735,63 @@ function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 24px;
+  z-index: 50;
+  padding: 16px;
 }
 
 .modal-card {
   background: #FFFFFF;
   border-radius: 20px;
   width: 100%;
-  max-width: 640px;
+  max-width: 580px;
   max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
   display: flex;
   flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .modal-header {
-  padding: 24px 28px 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #F1F5F9;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
 }
 
 .modal-title {
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #1E293B;
+  margin: 0;
 }
 
 .modal-subtitle {
   font-size: 0.85rem;
   color: #64748B;
-  margin-top: 4px;
+  margin: 4px 0 0 0;
 }
 
 .close-btn {
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  width: 32px;
-  height: 32px;
+  background: none;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #64748B;
-  transition: all 0.15s;
+  transition: all 0.2s;
 }
 
 .close-btn:hover {
-  background: #F1F5F9;
-  color: #1E293B;
+  background-color: #F1F5F9;
+  color: #475569;
 }
 
 .modal-body {
-  padding: 8px 28px 28px;
+  padding: 24px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -535,25 +803,124 @@ function handleSubmit() {
   gap: 6px;
 }
 
-.flex-1 {
-  flex: 1;
-}
-
 .form-row {
   display: flex;
   gap: 16px;
 }
 
+.flex-1 {
+  flex: 1;
+}
+
 .form-label {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
+}
+
+.form-label-mini {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 2px;
 }
 
 .reminder-label {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.schedule-details-box {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schedule-inputs-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-inputs-row .form-group {
+  min-width: 90px;
+}
+
+.calculated-preview-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: #3730A3;
+  font-size: 0.85rem;
+}
+
+.preview-text-label {
+  color: #4F46E5;
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.preview-text-value {
+  color: #1E1B4B;
+  font-weight: 700;
+}
+
+.recurrence-box {
+  background: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.form-label-sub {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 8px;
+}
+
+.weekday-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.weekday-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weekday-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.weekday-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(82, 67, 224, 0.25);
 }
 
 .custom-reminder-box {
@@ -669,54 +1036,4 @@ function handleSubmit() {
   background: var(--primary-hover);
   box-shadow: 0 6px 20px rgba(82, 67, 224, 0.4);
 }
-
-.recurrence-box {
-  background: #F8FAFC;
-  border: 1px dashed #CBD5E1;
-  border-radius: 12px;
-  padding: 10px 14px;
-}
-
-.form-label-sub {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #64748B;
-  margin-bottom: 8px;
-}
-
-.weekday-buttons {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.weekday-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid #CBD5E1;
-  background: #FFFFFF;
-  color: #475569;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.weekday-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.weekday-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #FFFFFF;
-  box-shadow: 0 2px 8px rgba(82, 67, 224, 0.25);
-}
-
 </style>
