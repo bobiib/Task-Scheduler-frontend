@@ -5,8 +5,17 @@ import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
+import FilterDropdown, { type DropdownGroup } from '../components/tasks/FilterDropdown.vue'
+import { useLabelStore } from '../stores/labelStore'
+import { useTeamStore } from '../stores/teamStore'
 
 const taskStore = useTaskStore()
+const labelStore = useLabelStore()
+const teamStore = useTeamStore()
+
+const selectedLabel = ref('Alle')
+const selectedAssignee = ref('Alle')
+const selectedTimeframe = ref('Alle')
 const searchQuery = ref('')
 const selectedStatus = ref('Alle')
 const viewMode = ref<'grid' | 'table'>('grid')
@@ -18,6 +27,8 @@ const editingTask = ref<Task | null>(null)
 
 onMounted(() => {
   taskStore.fetchTasks()
+  labelStore.fetchLabels()
+  teamStore.fetchTeams()
 })
 
 function openDetail(task: Task) {
@@ -40,6 +51,80 @@ function deleteTask(id: number) {
   closeDrawer()
   taskStore.deleteTask(id)
 }
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedStatus.value = 'Alle'
+  selectedLabel.value = 'Alle'
+  selectedAssignee.value = 'Alle'
+  selectedTimeframe.value = 'Alle'
+}
+
+const hasActiveFilters = computed(() => {
+  return (
+    searchQuery.value.trim() !== '' ||
+    selectedStatus.value !== 'Alle' ||
+    selectedLabel.value !== 'Alle' ||
+    selectedAssignee.value !== 'Alle' ||
+    selectedTimeframe.value !== 'Alle'
+  )
+})
+
+const availableLabels = computed(() => {
+  if (labelStore.labels.length > 0) {
+    return labelStore.labels.map(l => l.name)
+  }
+  const taskLabels = new Set<string>()
+  for (const t of taskStore.tasks) {
+    const list = t.labels || (t.label ? [t.label] : [])
+    list.forEach(l => { if (l?.name) taskLabels.add(l.name) })
+  }
+  if (taskLabels.size > 0) return [...taskLabels]
+  return ['Development', 'Schule', 'IT', 'Design', 'Organisation']
+})
+
+const availableUsers = computed(() => {
+  if (teamStore.users.length > 0) {
+    return teamStore.users.map(u => u.name)
+  }
+  const taskUsers = new Set<string>()
+  for (const t of taskStore.tasks) {
+    if (t.assignee?.type === 'user' && t.assignee?.name) {
+      taskUsers.add(t.assignee.name)
+    }
+  }
+  if (taskUsers.size > 0) return [...taskUsers]
+  return ['Fabio Erculiani', 'Dmytro Yermakov', 'Boris', 'Liam Bruno']
+})
+
+const availableTeams = computed(() => {
+  if (teamStore.teams.length > 0) {
+    return teamStore.teams.map(t => t.name)
+  }
+  const taskTeams = new Set<string>()
+  for (const t of taskStore.tasks) {
+    if (t.assignee?.type === 'team' && t.assignee?.name) {
+      taskTeams.add(t.assignee.name)
+    }
+  }
+  if (taskTeams.size > 0) return [...taskTeams]
+  return ['Projektteam']
+})
+
+const assigneeGroups = computed<DropdownGroup[]>(() => {
+  const groups: DropdownGroup[] = [
+    { name: '', options: ['Alle'] }
+  ]
+  if (availableUsers.value.length > 0) {
+    groups.push({ name: 'Personen', options: availableUsers.value })
+  }
+  if (availableTeams.value.length > 0) {
+    groups.push({ name: 'Teams', options: availableTeams.value })
+  }
+  return groups
+})
+
+
 
 const filteredTasks = computed(() => {
   return taskStore.tasks.filter(task => {
@@ -98,11 +183,39 @@ const filteredTasks = computed(() => {
         />
       </div>
 
-      <select v-model="selectedStatus" class="filter-select">
-        <option value="Alle">Status: Alle</option>
-        <option value="Offen">Status: Offen</option>
-        <option value="Erledigt">Status: Erledigt</option>
-      </select>
+      <FilterDropdown
+        v-model="selectedStatus"
+        prefix="Status"
+        :options="['Alle', 'Offen', 'Erledigt']"
+      />
+
+      <FilterDropdown
+        v-model="selectedLabel"
+        prefix="Label"
+        :options="['Alle', ...availableLabels]"
+      />
+
+      <FilterDropdown
+        v-model="selectedAssignee"
+        prefix="Zuweisung"
+        :groups="assigneeGroups"
+      />
+
+      <FilterDropdown
+        v-model="selectedTimeframe"
+        prefix="Zeitraum"
+        :options="['Alle', 'Heute fällig', 'Diese Woche', 'Überfällig']"
+      />
+
+      <button 
+        v-if="hasActiveFilters" 
+        type="button" 
+        class="btn-reset-filters" 
+        @click="resetFilters"
+        title="Filter zurücksetzen"
+      >
+        Filter zurücksetzen ✕
+      </button>
 
       <div class="toolbar-spacer"></div>
 
@@ -325,7 +438,8 @@ const filteredTasks = computed(() => {
   margin-bottom: 24px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .search-box {
@@ -356,23 +470,6 @@ const filteredTasks = computed(() => {
 .search-icon {
   font-size: 0.9rem;
   opacity: 0.6;
-}
-
-.filter-select {
-  height: 40px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid #E2E8F0;
-  background-color: #FFFFFF;
-  color: #334155;
-  font-size: 0.85rem;
-  font-weight: 500;
-  outline: none;
-  cursor: pointer;
-}
-
-.filter-select:focus {
-  border-color: #5243E0;
 }
 
 .toolbar-spacer {
@@ -623,4 +720,26 @@ const filteredTasks = computed(() => {
 .label-it { background-color: #E0F2FE; color: #0284C7; }
 .label-design { background-color: #FEE2E2; color: #EF4444; }
 .label-organisation { background-color: #FEF3C7; color: #D97706; }
+
+.btn-reset-filters {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px dashed #CBD5E1;
+  background: #F8FAFC;
+  color: #64748B;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-reset-filters:hover {
+  background: #F1F5F9;
+  color: #E11D48;
+  border-color: #FDA4AF;
+}
 </style>
