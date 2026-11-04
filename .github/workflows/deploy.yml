@@ -29,7 +29,8 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: taskify.bbzwinf.ch
-          username: Y!5a^pgs2bDu8tgJ
+          username: taskify.bbzwinf.ch_qy9m7tno0em
           password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
           local-dir: ./dist/
           server-dir: ./httpdocs/
