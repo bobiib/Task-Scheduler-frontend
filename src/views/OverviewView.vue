@@ -18,7 +18,7 @@ onMounted(() => {
   <div class="overview-container">
     <div class="overview-header">
       <div>
-        <h1 class="page-title">Meine Tasks</h1>
+        <h1 class="page-title">Boris Tomovski</h1>
         <p class="page-subtitle">Plane, priorisiere und erledige deine Aufgaben an einem Ort.</p>
       </div>
 
