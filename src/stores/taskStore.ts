@@ -28,20 +28,23 @@ export const useTaskStore = defineStore('tasks', () => {
         }
     }
 
-    async function toggleTask(instanceId: number) {
-        const task = tasks.value.find(t => t.instanceId === instanceId)
-        if (!task) return
+    const pendingStatus = new Set<number>()
 
-        const previousState = task.completed
-        task.completed = !previousState
+    async function toggleTask(instanceId: number, visibleTask?: Task) {
+        const task = visibleTask ?? tasks.value.find(t => t.instanceId === instanceId)
+        if (!task || pendingStatus.has(instanceId)) return
 
+        pendingStatus.add(instanceId)
+        error.value = null
         try {
-            await taskApi.updateInstanceStatus(instanceId, task.completed)
+            const { completed } = await taskApi.updateInstanceStatus(instanceId, !task.completed)
+            const storedTask = tasks.value.find(t => t.instanceId === instanceId)
+            if (storedTask) storedTask.completed = completed
+            return completed
         } catch (err: unknown) {
-            task.completed = previousState
-            if (err instanceof Error) {
-                error.value = err.message
-            }
+            error.value = err instanceof Error ? err.message : 'Fehler beim Aktualisieren des Status'
+        } finally {
+            pendingStatus.delete(instanceId)
         }
     }
 

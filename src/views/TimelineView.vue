@@ -21,7 +21,7 @@ onMounted(() => {
 
 const isModalOpen = ref(false)
 const isDrawerOpen = ref(false)
-const selectedTask = ref<Task | null>(null)
+const selectedInstanceId = ref<number | null>(null)
 const editingTask = ref<Task | null>(null)
 
 const searchQuery = ref('')
@@ -30,6 +30,9 @@ const selectedLabel = ref('Alle')
 
 const currentDate = ref(new Date())
 const weekTasks = ref<Task[]>([])
+const selectedTask = computed(() =>
+  weekTasks.value.find(task => task.instanceId === selectedInstanceId.value) ?? null
+)
 
 // Lokales Datum als YYYY-MM-DD, nicht UTC
 function toIsoDate(d: Date): string {
@@ -125,13 +128,22 @@ function goToToday() {
 
 // Drawer & Aktionen
 function openDetail(task: Task) {
-  selectedTask.value = task
+  selectedInstanceId.value = task.instanceId
   isDrawerOpen.value = true
+}
+
+async function toggleWeekTask(instanceId: number) {
+  const task = weekTasks.value.find(item => item.instanceId === instanceId)
+  if (!task) return
+
+  const completed = await taskStore.toggleTask(instanceId, task)
+  const currentTask = weekTasks.value.find(item => item.instanceId === instanceId)
+  if (currentTask && completed !== undefined) currentTask.completed = completed
 }
 
 function closeDrawer() {
   isDrawerOpen.value = false
-  selectedTask.value = null
+  selectedInstanceId.value = null
 }
 
 function editTask(task: Task) {
@@ -208,6 +220,7 @@ function getLabelColor(task: Task): string {
 
 <template>
   <div class="timeline-page">
+    <p v-if="taskStore.error" role="alert">{{ taskStore.error }}</p>
     <!-- Header -->
     <div class="page-header">
       <div>
@@ -316,7 +329,7 @@ function getLabelColor(task: Task): string {
             <!-- Task-Karten in diesem Slot -->
             <div 
               v-for="task in getTasksForSlot(day.isoDate, slot)" 
-              :key="task.id"
+              :key="task.instanceId"
               class="timeline-card"
               :class="[
                 getLabelColor(task),
@@ -357,7 +370,7 @@ function getLabelColor(task: Task): string {
       :is-open="isDrawerOpen" 
       :task="selectedTask" 
       @close="closeDrawer"
-      @toggle="taskStore.toggleTask"
+      @toggle="toggleWeekTask"
       @edit="editTask"
       @delete="deleteTask"
     />

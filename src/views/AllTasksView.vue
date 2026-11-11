@@ -18,8 +18,11 @@ const viewMode = ref<'grid' | 'table'>('grid')
 
 const isDrawerOpen = ref(false)
 const isCreateModalOpen = ref(false)
-const selectedTask = ref<Task | null>(null)
+const selectedInstanceId = ref<number | null>(null)
 const editingTask = ref<Task | null>(null)
+const selectedTask = computed(() =>
+  taskStore.tasks.find(task => task.instanceId === selectedInstanceId.value) ?? null
+)
 
 onMounted(() => {
   taskStore.fetchTasks()
@@ -27,13 +30,13 @@ onMounted(() => {
 })
 
 function openDetail(task: Task) {
-  selectedTask.value = task
+  selectedInstanceId.value = task.instanceId
   isDrawerOpen.value = true
 }
 
 function closeDrawer() {
   isDrawerOpen.value = false
-  selectedTask.value = null
+  selectedInstanceId.value = null
 }
 
 function editTask(task: Task) {
