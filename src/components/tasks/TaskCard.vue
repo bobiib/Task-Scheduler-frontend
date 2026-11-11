@@ -19,10 +19,34 @@ const primaryLabel = computed<TaskLabel>(() => {
   return { id: 0, name: 'Task', color: 'development' }
 })
 
+const recurrenceLabels: Record<string, string> = {
+  daily: 'Täglich',
+  weekly: 'Wöchentlich',
+  monthly_day: 'Monatlich',
+  monthly_weekday: 'Monatlich',
+  yearly: 'Jährlich',
+}
+
+const recurrenceLabel = computed(() => {
+  const recurrence = props.task.recurrence
+  if (!recurrence) return ''
+  const type = typeof recurrence === 'string' ? recurrence : recurrence.type
+  return recurrenceLabels[type] ?? type
+})
 
 const isDueToday = computed(() => {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('sv-SE')
   return props.task.dueDate === today || props.task.dueDate === 'Heute'
+})
+
+const dueDateLabel = computed(() => {
+  const date = props.task.dueDate
+  const isoDate = date.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!isoDate) return date
+
+  const [, year, month, day] = isoDate
+  const formatted = `${day}.${month}.${year}`
+  return isDueToday.value ? `Heute, ${formatted}` : formatted
 })
 </script>
 
@@ -57,18 +81,18 @@ const isDueToday = computed(() => {
         <rect x="3" y="4" width="18" height="18" rx="2"></rect>
         <line x1="3" y1="10" x2="21" y2="10"></line>
       </svg>
-      <span>{{ props.task.dueDate }}{{ props.task.dueTime ? ` · ${props.task.dueTime}` : '' }}</span>
+      <span>{{ dueDateLabel }}{{ props.task.dueTime ? ` · ${props.task.dueTime.slice(0, 5)}` : '' }}</span>
     </div>
 
     <div class="chips-row">
-      <div v-if="props.task.recurrence" class="chip">
+      <div v-if="recurrenceLabel" class="chip recurrence-chip">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M17 2l4 4-4 4"></path>
           <path d="M3 11v-1a4 4 0 0 1 4-4h14"></path>
           <path d="M7 22l-4-4 4-4"></path>
           <path d="M21 13v1a4 4 0 0 1-4 4H3"></path>
         </svg>
-        <span>{{ props.task.recurrence }}</span>
+        <span>Wiederholung: {{ recurrenceLabel }}</span>
       </div>
 
       <div v-if="props.task.reminder" class="chip">
@@ -226,6 +250,12 @@ const isDueToday = computed(() => {
   font-size: 0.75rem;
   color: #64748B;
   font-weight: 500;
+}
+
+.recurrence-chip {
+  background-color: #EEF2FF;
+  border-color: #E0E7FF;
+  color: #4338CA;
 }
 
 .card-footer {
