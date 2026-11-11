@@ -366,8 +366,6 @@ function getLabelColor(task: Task): string {
       :is-open="isModalOpen || editingTask !== null"
       :task="editingTask"
       @close="isModalOpen = false; editingTask = null"
-      @create="taskStore.addTask"
-      @update="taskStore.updateTask"
     />
   </div>
 </template>
