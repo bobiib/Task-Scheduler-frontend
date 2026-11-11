@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { Task } from '../types/task'
 import { useTaskStore } from '../stores/taskStore'
 import { useLabelStore } from '../stores/labelStore'
 import { useTeamStore } from '../stores/teamStore'
+import { taskApi } from '../api/taskApi'
 import TaskModal from '../components/tasks/TaskModal.vue'
 import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 
@@ -12,6 +13,7 @@ const labelStore = useLabelStore()
 const teamStore = useTeamStore()
 
 onMounted(() => {
+  loadWeek()
   if (taskStore.tasks.length === 0) taskStore.fetchTasks()
   if (labelStore.labels.length === 0) labelStore.fetchLabels()
   if (teamStore.users.length === 0) teamStore.fetchTeams()
@@ -27,6 +29,12 @@ const selectedUser = ref('Alle')
 const selectedLabel = ref('Alle')
 
 const currentDate = ref(new Date())
+const weekTasks = ref<Task[]>([])
+
+// Lokales Datum als YYYY-MM-DD, nicht UTC
+function toIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const timeSlots = [
   '08:00', '09:00', '10:00', '11:00', '12:00', 
@@ -51,13 +59,13 @@ const weekDays = computed(() => {
   }> = []
 
   const monday = new Date(startOfWeek.value)
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = toIsoDate(new Date())
   const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr']
 
   for (let i = 0; i < 5; i++) {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    const isoDate = d.toISOString().slice(0, 10)
+    const isoDate = toIsoDate(d)
 
     const formatted = d.toLocaleDateString('de-CH', { 
       day: '2-digit', 
@@ -81,6 +89,22 @@ const weekRangeText = computed(() => {
   const year = startOfWeek.value.getFullYear()
   return `${first} – ${last} ${year}`
 })
+
+// Nur die angezeigte Woche aus der API laden
+async function loadWeek() {
+  const from = weekDays.value[0]?.isoDate
+  const to = weekDays.value[4]?.isoDate
+  if (!from || !to) return
+  try {
+    weekTasks.value = await taskApi.getTasks({ from, to })
+  } catch {
+    weekTasks.value = []
+  }
+}
+
+watch(() => weekDays.value[0]?.isoDate, loadWeek)
+// Nach Anlegen, Bearbeiten, Löschen oder Abhaken neu laden
+watch(() => taskStore.tasks, loadWeek, { deep: true })
 
 // Navigation
 function prevWeek() {
@@ -123,7 +147,7 @@ function deleteTask(id: number) {
 
 // Filter
 const filteredTasks = computed(() => {
-  return taskStore.tasks.filter(task => {
+  return weekTasks.value.filter(task => {
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
       const matchTitle = task.title.toLowerCase().includes(q)
@@ -147,7 +171,7 @@ const filteredTasks = computed(() => {
 // Tasks nach Tag und Uhrzeit zuordnen
 function getTasksForSlot(dayIsoDate: string, slotTime: string): Task[] {
   const slotHour = slotTime.slice(0, 2)
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = toIsoDate(new Date())
 
   return filteredTasks.value.filter(task => {
     const isMatchingDay = task.dueDate === dayIsoDate || 
@@ -164,7 +188,7 @@ function getTasksForSlot(dayIsoDate: string, slotTime: string): Task[] {
 function isTaskOverdue(task: Task): boolean {
   if (task.completed) return false
   const now = new Date()
-  const todayIso = now.toISOString().slice(0, 10)
+  const todayIso = toIsoDate(now)
 
   if (task.dueDate === 'Heute') return false
   if (task.dueDate < todayIso) return true

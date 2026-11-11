@@ -50,7 +50,8 @@ export const useTaskStore = defineStore('tasks', () => {
         error.value = null
         try {
             const created = await taskApi.createTask(payload)
-            tasks.value.unshift(created)
+            // Recurring tasks get several instances, so reload all cards.
+            await fetchTasks()
             return created
         } catch (err: unknown) {
             if (err instanceof Error) {
