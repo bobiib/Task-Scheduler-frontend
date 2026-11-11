@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Task, CreateTaskPayload } from '../types/task'
+import type { Task, CreateTaskPayload, TaskReminder } from '../types/task'
 
 export const taskApi = {
     getTasks(params?: Record<string, string>): Promise<Task[]> {
@@ -17,6 +17,10 @@ export const taskApi = {
 
     deleteTask(id: number): Promise<void> {
         return apiClient.delete<void>(`/tasks/${id}`)
+    },
+
+    getTaskReminders(taskId: number): Promise<TaskReminder[]> {
+        return apiClient.get<TaskReminder[]>(`/tasks/${taskId}/reminders`)
     },
 
     updateInstanceStatus(instanceId: number, completed: boolean): Promise<{ instanceId: number; completed: boolean }> {

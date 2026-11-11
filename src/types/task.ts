@@ -68,3 +68,13 @@ export interface RecurrenceRule {
     weekday?: number
     monthOfYear?: number
 }
+
+export type ReminderUnit = 'minutes' | 'hours' | 'days' | 'weeks'
+
+export interface TaskReminder {
+    id: number
+    taskId: number
+    amount: number
+    unit: ReminderUnit
+    isActive: boolean
+}

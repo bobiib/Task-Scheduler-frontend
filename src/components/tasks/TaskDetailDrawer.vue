@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Task, TaskLabel } from '../../types/task'
+import { computed, ref, watch } from 'vue'
+import type { Task, TaskLabel, TaskReminder, ReminderUnit } from '../../types/task'
+import { taskApi } from '../../api/taskApi' 
 
 const props = defineProps<{
   task: Task | null
   isOpen: boolean
 }>()
+const reminders = ref<TaskReminder[]>([])
+const isLoadingReminders = ref(false)
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -21,6 +24,62 @@ const primaryLabel = computed<TaskLabel>(() => {
   }
   return { id: 0, name: 'Task', color: 'development' }
 })
+
+async function loadReminders(taskId: number) {
+  isLoadingReminders.value = true
+  try {
+    reminders.value = await taskApi.getTaskReminders(taskId)
+  } catch {
+    reminders.value = []
+  } finally {
+    isLoadingReminders.value = false
+  }
+}
+
+watch(
+  () => [props.isOpen, props.task?.id],
+  ([isOpen, taskId]) => {
+    if (isOpen && typeof taskId === 'number') {
+      loadReminders(taskId)
+    } else {
+      reminders.value = []
+    }
+  },
+  { immediate: true }
+)
+
+function formatLeadTime(amount: number, unit: ReminderUnit): string {
+  if (unit === 'minutes') return `${amount} Min. vorher`
+  if (unit === 'hours') return amount === 1 ? '1 Std. vorher' : `${amount} Std. vorher`
+  if (unit === 'days') return amount === 1 ? '1 Tag vorher' : `${amount} Tage vorher`
+  if (unit === 'weeks') return amount === 1 ? '1 Woche vorher' : `${amount} Wochen vorher`
+  return `${amount} ${unit} vorher`
+}
+
+function calculateReminderTime(dueDateStr: string, dueTimeStr: string | null | undefined, amount: number, unit: ReminderUnit): string {
+  const timePart = dueTimeStr ? dueTimeStr.slice(0, 5) : '09:00'
+  const target = new Date(`${dueDateStr}T${timePart}:00`)
+  if (isNaN(target.getTime())) return ''
+
+  const reminderDate = new Date(target)
+  if (unit === 'minutes') {
+    reminderDate.setMinutes(reminderDate.getMinutes() - amount)
+  } else if (unit === 'hours') {
+    reminderDate.setHours(reminderDate.getHours() - amount)
+  } else if (unit === 'days') {
+    reminderDate.setDate(reminderDate.getDate() - amount)
+  } else if (unit === 'weeks') {
+    reminderDate.setDate(reminderDate.getDate() - amount * 7)
+  }
+
+  const day = String(reminderDate.getDate()).padStart(2, '0')
+  const month = String(reminderDate.getMonth() + 1).padStart(2, '0')
+  const year = reminderDate.getFullYear()
+  const hours = String(reminderDate.getHours()).padStart(2, '0')
+  const minutes = String(reminderDate.getMinutes()).padStart(2, '0')
+
+  return `${day}.${month}.${year}, ${hours}:${minutes} Uhr`
+}
 </script>
 
 <template>
@@ -74,6 +133,39 @@ const primaryLabel = computed<TaskLabel>(() => {
             <strong class="detail-value">
               {{ task.recurrence ? 'Wiederkehrender Task' : 'Einmaliger Task' }}
             </strong>
+          </div>
+        </div>
+
+        <div class="reminders-section">
+          <span class="detail-label">Gespeicherte Erinnerungen</span>
+
+          <div v-if="isLoadingReminders" class="reminders-loading">
+            Erinnerungen werden geladen...
+          </div>
+
+          <div v-else-if="reminders.length > 0" class="reminders-list">
+            <div v-for="item in reminders" :key="item.id" class="reminder-row">
+              <div class="reminder-info">
+                <strong class="reminder-lead">{{ formatLeadTime(item.amount, item.unit) }}</strong>
+                <span v-if="task.dueDate" class="reminder-time">
+                  Zeitpunkt: {{ calculateReminderTime(task.dueDate, task.dueTime, item.amount, item.unit) }}
+                </span>
+              </div>
+              <span class="reminder-status-badge" :class="item.isActive ? 'badge-active' : 'badge-inactive'">
+                {{ item.isActive ? 'Aktiv' : 'Inaktiv' }}
+              </span>
+            </div>
+          </div>
+
+          <div v-else-if="task.reminder" class="reminder-row">
+            <div class="reminder-info">
+              <strong class="reminder-lead">{{ task.reminder }}</strong>
+            </div>
+            <span class="reminder-status-badge badge-active">Aktiv</span>
+          </div>
+
+          <div v-else class="reminder-empty">
+            Keine Erinnerungen hinterlegt
           </div>
         </div>
 
@@ -259,4 +351,73 @@ const primaryLabel = computed<TaskLabel>(() => {
 .label-it { background-color: #E0F2FE; color: #0284C7; }
 .label-design { background-color: #FEE2E2; color: #EF4444; }
 .label-organisation { background-color: #FEF3C7; color: #D97706; }
+
+.reminders-section {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reminders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.reminder-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminder-lead {
+  font-size: 0.88rem;
+  color: #1E293B;
+  font-weight: 600;
+}
+
+.reminder-time {
+  font-size: 0.78rem;
+  color: #64748B;
+}
+
+.reminder-status-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+
+.badge-active {
+  background-color: #DCFCE7;
+  color: #16A34A;
+}
+
+.badge-inactive {
+  background-color: #F1F5F9;
+  color: #64748B;
+}
+
+.reminders-loading,
+.reminder-empty {
+  font-size: 0.82rem;
+  color: #94A3B8;
+  font-style: italic;
+  padding: 4px 0;
+}
 </style>
