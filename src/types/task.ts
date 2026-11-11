@@ -50,10 +50,6 @@ export interface CreateTaskPayload {
     assignedTeamId: number | null
     labelIds: number[]
     recurrence?: RecurrenceRule | null
-    reminder?: {
-        amount: number
-        unit: string
-    } | null
 }
 
 export type RecurrenceType = 'daily' | 'weekly' | 'monthly_day' | 'monthly_weekday' | 'yearly'

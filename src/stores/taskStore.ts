@@ -73,6 +73,7 @@ export const useTaskStore = defineStore('tasks', () => {
             if (err instanceof Error) {
                 error.value = err.message
             }
+            throw err
         }
     }
 

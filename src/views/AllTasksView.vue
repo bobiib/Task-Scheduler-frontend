@@ -231,8 +231,6 @@ function deleteTask(id: number) {
       :is-open="isCreateModalOpen || editingTask !== null"
       :task="editingTask"
       @close="isCreateModalOpen = false; editingTask = null"
-      @create="taskStore.addTask"
-      @update="taskStore.updateTask"
     />
   </div>
 </template>
