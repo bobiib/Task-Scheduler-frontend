@@ -188,7 +188,6 @@ onMounted(() => {
     <TaskModal 
       :is-open="isModalOpen" 
       @close="isModalOpen = false" 
-      @create="taskStore.addTask"
     />
   </div>
 </template>

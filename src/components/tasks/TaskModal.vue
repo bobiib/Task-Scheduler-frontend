@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { CreateTaskPayload, Task, RecurrenceRule } from '../../types/task'
+import type { CreateTaskPayload, Task, RecurrenceRule, ReminderUnit } from '../../types/task'
 import { useLabelStore } from '../../stores/labelStore'
 import { useTeamStore } from '../../stores/teamStore'
+import { useTaskStore } from '../../stores/taskStore'
+import { taskApi } from '../../api/taskApi'
 
 const props = defineProps<{
   isOpen: boolean
@@ -11,12 +13,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'create', payload: CreateTaskPayload): void
-  (e: 'update', id: number, payload: Partial<CreateTaskPayload>): void
 }>()
 
 const labelStore = useLabelStore()
 const teamStore = useTeamStore()
+const taskStore = useTaskStore()
+const errorMessage = ref('')
 
 const title = ref('')
 const description = ref('')
@@ -199,9 +201,9 @@ function toggleWeekday(day: number) {
   }
 }
 
-const selectedLabelId = ref<number>(2)
+const selectedLabelId = ref<number | null>(null)
 const selectedAssigneeType = ref<'user' | 'team'>('user')
-const selectedAssigneeId = ref<number>(1)
+const selectedAssigneeId = ref<number | null>(null)
 
 const selectedReminderPreset = ref('30_minutes')
 const customReminderAmount = ref(30)
@@ -237,7 +239,7 @@ function parseReminder(reminderStr?: string | null) {
   }
 }
 
-function getReminderPayload(): { amount: number; unit: string } | null {
+function getReminderPayload(): { amount: number; unit: ReminderUnit } | null {
   if (selectedReminderPreset.value === 'none') {
     return null
   }
@@ -250,7 +252,7 @@ function getReminderPayload(): { amount: number; unit: string } | null {
   const parts = selectedReminderPreset.value.split('_')
   return {
     amount: Number(parts[0]) || 30,
-    unit: parts[1] || 'minutes'
+    unit: (parts[1] || 'minutes') as ReminderUnit
   }
 }
 
@@ -303,12 +305,20 @@ function getRecurrencePayload(): RecurrenceRule | null {
   return null
 }
 
-watch(() => props.isOpen, (open) => {
+// Stand beim Öffnen, damit beim Bearbeiten nur Geändertes gesendet wird
+let initialSchedule = ''
+let initialRecurrence = ''
+
+watch(() => props.isOpen, async (open) => {
   if (!open) return
-  if (labelStore.labels.length === 0) labelStore.fetchLabels()
-  if (teamStore.users.length === 0) teamStore.fetchTeams()
+  if (labelStore.labels.length === 0) await labelStore.fetchLabels()
+  if (teamStore.users.length === 0) await teamStore.fetchTeams()
 
   const task = props.task
+  if (!task) {
+    selectedLabelId.value = labelStore.labels[0]?.id ?? null
+    selectedAssigneeId.value = teamStore.users[0]?.id ?? null
+  }
   if (task) {
     title.value = task.title
     description.value = task.description || ''
@@ -337,10 +347,13 @@ watch(() => props.isOpen, (open) => {
     selectedAssigneeId.value = task.assignee?.id ?? selectedAssigneeId.value
     parseReminder(task.reminder)
     parseRecurrence((task as any).recurrenceRule || task.recurrence)
+    initialSchedule = JSON.stringify(getSchedulePayload())
+    initialRecurrence = JSON.stringify(getRecurrencePayload())
   }
 })
 
 function handleClose() {
+  errorMessage.value = ''
   resetForm()
   emit('close')
 }
@@ -358,69 +371,93 @@ function resetForm() {
   recurrenceType.value = 'none'
   selectedWeekdays.value = []
   recurrenceEndDate.value = ''
-  selectedLabelId.value = 2
+  selectedLabelId.value = null
   selectedAssigneeType.value = 'user'
-  selectedAssigneeId.value = 1
+  selectedAssigneeId.value = null
   selectedReminderPreset.value = 'none'
   customReminderAmount.value = 30
   customReminderUnit.value = 'minutes'
 }
 
-function handleSubmit() {
-  if (!title.value.trim()) return
-
+function getSchedulePayload() {
   let dateValue = dueDate.value
   if (!dateValue || scheduleType.value !== 'date') {
     dateValue = calculateDateFromSchedule()
   }
   if (!dateValue) {
-    const today = new Date()
-    dateValue = today.toISOString().slice(0, 10)
+    dateValue = new Date().toISOString().slice(0, 10)
   }
 
-  const reminderData = getReminderPayload()
-  const recurrenceData = getRecurrencePayload()
-
-  const payload: CreateTaskPayload = {
-    title: title.value.trim(),
-    description: description.value.trim() || undefined,
+  return {
     scheduleType: scheduleType.value,
     dueDate: dateValue,
-    scheduleDate: dateValue,
+    dueTime: dueTime.value || undefined,
     scheduleYear: scheduleType.value !== 'date' ? scheduleYear.value : null,
     scheduleMonth: scheduleType.value !== 'date' ? scheduleMonth.value : null,
     scheduleWeekOfMonth: scheduleType.value !== 'date' ? scheduleWeekOfMonth.value : null,
-    scheduleWeekday: scheduleType.value === 'weekday_in_month' ? scheduleWeekday.value : null,
-    dueTime: dueTime.value || undefined,
-    createdByUserId: 1,
+    scheduleWeekday: scheduleType.value === 'weekday_in_month' ? scheduleWeekday.value : null
+  }
+}
+
+// Erinnerungen haben eigene Endpunkte, darum separat speichern
+async function saveReminder(taskId: number): Promise<boolean> {
+  const wanted = getReminderPayload()
+  const [current] = props.task ? await taskApi.getTaskReminders(taskId) : []
+
+  if (!wanted) {
+    if (current) await taskApi.deleteReminder(current.id)
+    return !!current
+  }
+  if (!current) {
+    await taskApi.createReminder(taskId, wanted)
+    return true
+  }
+  if (current.amount !== wanted.amount || current.unit !== wanted.unit) {
+    await taskApi.updateReminder(current.id, wanted)
+    return true
+  }
+  return false
+}
+
+async function handleSubmit() {
+  if (!title.value.trim()) return
+  errorMessage.value = ''
+
+  const schedule = getSchedulePayload()
+  const recurrence = getRecurrencePayload()
+  const base = {
+    title: title.value.trim(),
     assignedUserId: selectedAssigneeType.value === 'user' ? selectedAssigneeId.value : null,
     assignedTeamId: selectedAssigneeType.value === 'team' ? selectedAssigneeId.value : null,
-    labelIds: [selectedLabelId.value],
-    reminder: reminderData,
-    recurrence: recurrenceData
+    labelIds: selectedLabelId.value ? [selectedLabelId.value] : []
   }
 
-  if (props.task) {
-    emit('update', props.task.id, {
-      title: payload.title,
-      description: description.value.trim(),
-      scheduleType: payload.scheduleType,
-      dueDate: payload.dueDate,
-      dueTime: payload.dueTime,
-      scheduleYear: payload.scheduleYear,
-      scheduleMonth: payload.scheduleMonth,
-      scheduleWeekOfMonth: payload.scheduleWeekOfMonth,
-      scheduleWeekday: payload.scheduleWeekday,
-      assignedUserId: payload.assignedUserId,
-      assignedTeamId: payload.assignedTeamId,
-      labelIds: payload.labelIds,
-      reminder: reminderData,
-      recurrence: recurrenceData
-    })
-  } else {
-    emit('create', payload)
+  try {
+    let taskId: number
+    if (props.task) {
+      taskId = props.task.id
+      const payload: Partial<CreateTaskPayload> = { ...base, description: description.value.trim() }
+      // Unveränderte Termine nicht senden, sonst verschiebt das Backend offene Termine
+      if (JSON.stringify(schedule) !== initialSchedule) Object.assign(payload, schedule)
+      if (JSON.stringify(recurrence) !== initialRecurrence) payload.recurrence = recurrence
+      await taskStore.updateTask(taskId, payload)
+    } else {
+      const created = await taskStore.addTask({
+        ...base,
+        ...schedule,
+        description: description.value.trim() || undefined,
+        scheduleDate: schedule.dueDate,
+        createdByUserId: teamStore.users[0]?.id ?? 0,
+        recurrence
+      })
+      taskId = created.id
+    }
+
+    if (await saveReminder(taskId)) await taskStore.fetchTasks()
+    handleClose()
+  } catch (err: unknown) {
+    errorMessage.value = err instanceof Error ? err.message : 'Speichern fehlgeschlagen'
   }
-  handleClose()
 }
 </script>
 
@@ -713,6 +750,8 @@ function handleSubmit() {
           </div>
         </div>
 
+        <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+
         <div class="modal-footer">
           <button type="button" class="btn-secondary" @click="handleClose">
             Abbrechen
@@ -993,6 +1032,12 @@ function handleSubmit() {
   accent-color: var(--primary);
   width: 16px;
   height: 16px;
+}
+
+.form-error {
+  margin: 0 0 12px;
+  color: #DC2626;
+  font-size: 13px;
 }
 
 .modal-footer {
