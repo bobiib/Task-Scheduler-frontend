@@ -2,8 +2,9 @@ import { apiClient } from './client'
 import type { Task, CreateTaskPayload } from '../types/task'
 
 export const taskApi = {
-    getTasks(): Promise<Task[]> {
-        return apiClient.get<Task[]>('/tasks')
+    getTasks(params?: Record<string, string>): Promise<Task[]> {
+        const query = params ? `?${new URLSearchParams(params)}` : ''
+        return apiClient.get<Task[]>(`/tasks${query}`)
     },
 
     createTask(payload: CreateTaskPayload): Promise<Task> {
