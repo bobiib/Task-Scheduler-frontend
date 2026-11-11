@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
 
+import FilterDropdown from '../components/tasks/FilterDropdown.vue'
+import { useTaskFilters } from '../composables/useTaskFilters'
+
 const taskStore = useTaskStore()
-const searchQuery = ref('')
+const {
+  searchQuery, selectedStatus, selectedLabel, selectedAssignee, selectedTimeframe,
+  labelOptions, assigneeGroups, timeframeOptions, hasActiveFilters,
+  resetFilters, loadFilterOptions, filteredTasks,
+} = useTaskFilters()
+const visibleOpenCount = computed(() => filteredTasks.value.filter(task => !task.completed).length)
 const currentView = ref<'grid' | 'list'>('grid')
 const isModalOpen = ref(false)
 
 onMounted(() => {
   taskStore.fetchTasks()
+  loadFilterOptions()
 })
 </script>
 
@@ -112,19 +121,12 @@ onMounted(() => {
       </div>
 
       <div class="filter-actions">
-        <button type="button" class="filter-dropdown">
-          <span>Alle User</span>
-          <span class="chevron">⌵</span>
-        </button>
-
-        <button type="button" class="filter-dropdown">
-          <span>Zeitraum</span>
-          <span class="chevron">⌵</span>
-        </button>
-
-        <button type="button" class="filter-dropdown">
-          <span>Labels</span>
-          <span class="chevron">⌵</span>
+        <FilterDropdown v-model="selectedStatus" prefix="Status" :options="['Alle', 'Offen', 'Erledigt']" />
+        <FilterDropdown v-model="selectedAssignee" prefix="Zuweisung" :groups="assigneeGroups" />
+        <FilterDropdown v-model="selectedTimeframe" prefix="Zeitraum" :options="timeframeOptions" />
+        <FilterDropdown v-model="selectedLabel" prefix="Label" :options="labelOptions" />
+        <button v-if="hasActiveFilters" type="button" class="reset-filters" @click="resetFilters">
+          Filter zurücksetzen
         </button>
 
         <div class="view-switch">
@@ -162,7 +164,7 @@ onMounted(() => {
 
     <div class="section-title-row">
       <h2 class="section-title">Aktuelle Tasks</h2>
-      <span class="tasks-count">{{ taskStore.openTasks.length }} offen</span>
+      <span class="tasks-count">{{ visibleOpenCount }} offen</span>
     </div>
 
     <div v-if="taskStore.loading" class="loading-state">
@@ -170,13 +172,13 @@ onMounted(() => {
       <span>Tasks werden geladen...</span>
     </div>
 
-    <div v-else-if="taskStore.tasks.length === 0" class="empty-state">
-      <p>Keine Tasks gefunden. Erstelle jetzt deinen ersten Task!</p>
+    <div v-else-if="filteredTasks.length === 0" class="empty-state">
+      <p>Keine Tasks gefunden.</p>
     </div>
 
-    <div v-else class="tasks-grid">
+    <div v-else class="tasks-grid" :class="{ 'tasks-list': currentView === 'list' }">
       <TaskCard 
-        v-for="task in taskStore.tasks" 
+        v-for="task in filteredTasks"
         :key="task.instanceId" 
         :task="task" 
         @toggle="taskStore.toggleTask"
@@ -366,11 +368,12 @@ onMounted(() => {
 
 .filter-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.filter-dropdown {
+.reset-filters {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -384,7 +387,7 @@ onMounted(() => {
   transition: all 0.15s;
 }
 
-.filter-dropdown:hover {
+.reset-filters:hover {
   background: #F1F5F9;
   border-color: #CBD5E1;
 }
@@ -440,6 +443,10 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.tasks-list {
+  grid-template-columns: 1fr;
 }
 
 .loading-state,

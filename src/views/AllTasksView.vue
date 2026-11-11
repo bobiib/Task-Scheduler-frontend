@@ -5,19 +5,15 @@ import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
 import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
-import FilterDropdown, { type DropdownGroup } from '../components/tasks/FilterDropdown.vue'
-import { useLabelStore } from '../stores/labelStore'
-import { useTeamStore } from '../stores/teamStore'
+import FilterDropdown from '../components/tasks/FilterDropdown.vue'
+import { useTaskFilters } from '../composables/useTaskFilters'
 
 const taskStore = useTaskStore()
-const labelStore = useLabelStore()
-const teamStore = useTeamStore()
-
-const selectedLabel = ref('Alle')
-const selectedAssignee = ref('Alle')
-const selectedTimeframe = ref('Alle')
-const searchQuery = ref('')
-const selectedStatus = ref('Alle')
+const {
+  selectedStatus, searchQuery, selectedLabel, selectedAssignee, selectedTimeframe,
+  labelOptions, assigneeGroups, timeframeOptions, hasActiveFilters,
+  resetFilters, loadFilterOptions, filteredTasks,
+} = useTaskFilters()
 const viewMode = ref<'grid' | 'table'>('grid')
 
 const isDrawerOpen = ref(false)
@@ -27,8 +23,7 @@ const editingTask = ref<Task | null>(null)
 
 onMounted(() => {
   taskStore.fetchTasks()
-  labelStore.fetchLabels()
-  teamStore.fetchTeams()
+  loadFilterOptions()
 })
 
 function openDetail(task: Task) {
@@ -51,100 +46,6 @@ function deleteTask(id: number) {
   closeDrawer()
   taskStore.deleteTask(id)
 }
-
-function resetFilters() {
-  searchQuery.value = ''
-  selectedStatus.value = 'Alle'
-  selectedLabel.value = 'Alle'
-  selectedAssignee.value = 'Alle'
-  selectedTimeframe.value = 'Alle'
-}
-
-const hasActiveFilters = computed(() => {
-  return (
-    searchQuery.value.trim() !== '' ||
-    selectedStatus.value !== 'Alle' ||
-    selectedLabel.value !== 'Alle' ||
-    selectedAssignee.value !== 'Alle' ||
-    selectedTimeframe.value !== 'Alle'
-  )
-})
-
-const availableLabels = computed(() => {
-  if (labelStore.labels.length > 0) {
-    return labelStore.labels.map(l => l.name)
-  }
-  const taskLabels = new Set<string>()
-  for (const t of taskStore.tasks) {
-    const list = t.labels || (t.label ? [t.label] : [])
-    list.forEach(l => { if (l?.name) taskLabels.add(l.name) })
-  }
-  if (taskLabels.size > 0) return [...taskLabels]
-  return ['Development', 'Schule', 'IT', 'Design', 'Organisation']
-})
-
-const availableUsers = computed(() => {
-  if (teamStore.users.length > 0) {
-    return teamStore.users.map(u => u.name)
-  }
-  const taskUsers = new Set<string>()
-  for (const t of taskStore.tasks) {
-    if (t.assignee?.type === 'user' && t.assignee?.name) {
-      taskUsers.add(t.assignee.name)
-    }
-  }
-  if (taskUsers.size > 0) return [...taskUsers]
-  return ['Fabio Erculiani', 'Dmytro Yermakov', 'Boris', 'Liam Bruno']
-})
-
-const availableTeams = computed(() => {
-  if (teamStore.teams.length > 0) {
-    return teamStore.teams.map(t => t.name)
-  }
-  const taskTeams = new Set<string>()
-  for (const t of taskStore.tasks) {
-    if (t.assignee?.type === 'team' && t.assignee?.name) {
-      taskTeams.add(t.assignee.name)
-    }
-  }
-  if (taskTeams.size > 0) return [...taskTeams]
-  return ['Projektteam']
-})
-
-const assigneeGroups = computed<DropdownGroup[]>(() => {
-  const groups: DropdownGroup[] = [
-    { name: '', options: ['Alle'] }
-  ]
-  if (availableUsers.value.length > 0) {
-    groups.push({ name: 'Personen', options: availableUsers.value })
-  }
-  if (availableTeams.value.length > 0) {
-    groups.push({ name: 'Teams', options: availableTeams.value })
-  }
-  return groups
-})
-
-
-
-const filteredTasks = computed(() => {
-  return taskStore.tasks.filter(task => {
-    if (searchQuery.value.trim()) {
-      const suchWort = searchQuery.value.toLowerCase()
-      if (!task.title.toLowerCase().includes(suchWort)) {
-        return false
-      }
-    }
-
-    if (selectedStatus.value === 'Offen' && task.completed) {
-      return false
-    }
-    if (selectedStatus.value === 'Erledigt' && !task.completed) {
-      return false
-    }
-
-    return true
-  })
-})
 </script>
 
 <template>
@@ -192,7 +93,7 @@ const filteredTasks = computed(() => {
       <FilterDropdown
         v-model="selectedLabel"
         prefix="Label"
-        :options="['Alle', ...availableLabels]"
+        :options="labelOptions"
       />
 
       <FilterDropdown
@@ -204,7 +105,7 @@ const filteredTasks = computed(() => {
       <FilterDropdown
         v-model="selectedTimeframe"
         prefix="Zeitraum"
-        :options="['Alle', 'Heute fällig', 'Diese Woche', 'Überfällig']"
+        :options="timeframeOptions"
       />
 
       <button 
@@ -239,10 +140,12 @@ const filteredTasks = computed(() => {
       </div>
     </div>
 
-    <div v-if="viewMode === 'grid'" class="task-grid">
+    <p v-if="taskStore.loading">Tasks werden geladen...</p>
+    <p v-else-if="filteredTasks.length === 0">Keine Tasks gefunden.</p>
+    <div v-else-if="viewMode === 'grid'" class="task-grid">
       <TaskCard 
         v-for="task in filteredTasks" 
-        :key="task.id" 
+        :key="task.instanceId"
         :task="task" 
         @toggle="taskStore.toggleTask" 
         @click="openDetail"
@@ -262,7 +165,7 @@ const filteredTasks = computed(() => {
       <div class="task-table-body">
         <div 
           v-for="t in filteredTasks" 
-          :key="t.id"
+          :key="t.instanceId"
           class="task-table-row"
           :class="{ 'is-completed': t.completed }"
           @click="openDetail(t)"
@@ -289,8 +192,8 @@ const filteredTasks = computed(() => {
           </div>
 
           <div class="table-assignee">
-            <span class="avatar small">{{ t.assignee.initials }}</span>
-            <span>{{ t.assignee.name }}</span>
+            <span class="avatar small">{{ t.assignee?.initials || 'TS' }}</span>
+            <span>{{ t.assignee?.name || 'Nicht zugewiesen' }}</span>
           </div>
 
           <div>

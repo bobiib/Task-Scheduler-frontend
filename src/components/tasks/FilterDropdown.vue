@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 
-export interface DropdownGroup {
+type DropdownOption = string | { value: string; label: string }
+
+interface DropdownGroup {
   name: string
-  options: string[]
+  options: DropdownOption[]
 }
 
 const props = withDefaults(
   defineProps<{
     modelValue: string
     prefix: string
-    options?: string[]
+    options?: DropdownOption[]
     groups?: DropdownGroup[]
   }>(),
   {
@@ -57,13 +59,23 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
 })
 
-const displayLabel = computed(() => {
-  return `${props.prefix}: ${props.modelValue}`
+const menuGroups = computed(() => {
+  const groups = props.options.length ? [{ name: '', options: props.options }] : props.groups
+  return groups.filter(group => group.options.length).map(group => ({
+    name: group.name,
+    options: group.options.map(option =>
+      typeof option === 'string' ? { value: option, label: option } : option
+    ),
+  }))
 })
 
-const isActive = computed(() => {
-  return props.modelValue !== 'Alle'
+const displayLabel = computed(() => {
+  const selected = menuGroups.value.flatMap(group => group.options)
+    .find(option => option.value === props.modelValue)
+  return `${props.prefix}: ${selected?.label ?? 'Alle'}`
 })
+
+const isActive = computed(() => props.modelValue !== 'Alle')
 </script>
 
 <template>
@@ -93,38 +105,19 @@ const isActive = computed(() => {
     </button>
 
     <div v-if="isOpen" class="dropdown-menu">
-      <!-- Einfache Optionen -->
-      <template v-if="options && options.length > 0">
-        <div 
-          v-for="opt in options" 
-          :key="opt" 
-          class="dropdown-item" 
-          :class="{ selected: modelValue === opt }"
-          @click="selectOption(opt)"
+      <div v-for="group in menuGroups" :key="group.name" class="group-wrapper">
+        <div v-if="group.name" class="group-title">{{ group.name }}</div>
+        <div
+          v-for="option in group.options"
+          :key="option.value"
+          class="dropdown-item"
+          :class="{ selected: modelValue === option.value }"
+          @click="selectOption(option.value)"
         >
-          <span>{{ opt }}</span>
-          <span v-if="modelValue === opt" class="check-mark">✓</span>
+          <span>{{ option.label }}</span>
+          <span v-if="modelValue === option.value" class="check-mark">✓</span>
         </div>
-      </template>
-
-      <!-- Gruppierte Optionen -->
-      <template v-else-if="groups && groups.length > 0">
-        <template v-for="(group, gIndex) in groups" :key="group.name || gIndex">
-          <div v-if="group.options.length > 0" class="group-wrapper">
-            <div v-if="group.name" class="group-title">{{ group.name }}</div>
-            <div 
-              v-for="opt in group.options" 
-              :key="opt" 
-              class="dropdown-item" 
-              :class="{ selected: modelValue === opt }"
-              @click="selectOption(opt)"
-            >
-              <span>{{ opt }}</span>
-              <span v-if="modelValue === opt" class="check-mark">✓</span>
-            </div>
-          </div>
-        </template>
-      </template>
+      </div>
     </div>
   </div>
 </template>

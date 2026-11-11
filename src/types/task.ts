@@ -29,7 +29,7 @@ export interface Task {
     reminder?: string | null
     labels: TaskLabel[]
     label?: TaskLabel
-    assignee: TaskAssignee
+    assignee: TaskAssignee | null
     completed: boolean
     isDueToday?: boolean
 }
