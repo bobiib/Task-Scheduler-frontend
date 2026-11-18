@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import type { Task } from '../types/task'
 import { useTaskStore } from '../stores/taskStore'
 import TaskCard from '../components/tasks/TaskCard.vue'
+import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer.vue'
 import TaskModal from '../components/tasks/TaskModal.vue'
 
 import FilterDropdown from '../components/tasks/FilterDropdown.vue'
@@ -16,6 +18,33 @@ const {
 const visibleOpenCount = computed(() => filteredTasks.value.filter(task => !task.completed).length)
 const currentView = ref<'grid' | 'list'>('grid')
 const isModalOpen = ref(false)
+const isDrawerOpen = ref(false)
+const selectedInstanceId = ref<number | null>(null)
+const editingTask = ref<Task | null>(null)
+const selectedTask = computed(() =>
+  taskStore.tasks.find(task => task.instanceId === selectedInstanceId.value) ?? null
+)
+
+function openDetail(task: Task) {
+  selectedInstanceId.value = task.instanceId
+  isDrawerOpen.value = true
+}
+
+function closeDrawer() {
+  isDrawerOpen.value = false
+  selectedInstanceId.value = null
+}
+
+function editTask(task: Task) {
+  closeDrawer()
+  editingTask.value = task
+}
+
+function deleteTask(id: number) {
+  if (!confirm('Task wirklich löschen?')) return
+  closeDrawer()
+  taskStore.deleteTask(id)
+}
 
 onMounted(() => {
   taskStore.fetchTasks()
@@ -182,12 +211,23 @@ onMounted(() => {
         :key="task.instanceId" 
         :task="task" 
         @toggle="taskStore.toggleTask"
+        @click="openDetail"
       />
     </div>
 
+    <TaskDetailDrawer 
+      :is-open="isDrawerOpen" 
+      :task="selectedTask" 
+      @close="closeDrawer"
+      @toggle="taskStore.toggleTask"
+      @edit="editTask"
+      @delete="deleteTask"
+    />
+
     <TaskModal 
-      :is-open="isModalOpen" 
-      @close="isModalOpen = false" 
+      :is-open="isModalOpen || editingTask !== null" 
+      :task="editingTask"
+      @close="isModalOpen = false; editingTask = null" 
     />
   </div>
 </template>

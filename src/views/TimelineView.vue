@@ -52,7 +52,7 @@ const startOfWeek = computed(() => {
   return new Date(d.setDate(diff))
 })
 
-// Wochentage Mo-Fr berechnen
+// Wochentage Mo-So berechnen
 const weekDays = computed(() => {
   const days: Array<{
     isoDate: string
@@ -63,9 +63,9 @@ const weekDays = computed(() => {
 
   const monday = new Date(startOfWeek.value)
   const todayIso = toIsoDate(new Date())
-  const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr']
+  const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
     const isoDate = toIsoDate(d)
@@ -87,7 +87,7 @@ const weekDays = computed(() => {
 
 const weekRangeText = computed(() => {
   const first = weekDays.value[0]?.formatted
-  const last = weekDays.value[4]?.formatted
+  const last = weekDays.value[weekDays.value.length - 1]?.formatted
   if (!first || !last) return ''
   const year = startOfWeek.value.getFullYear()
   return `${first} – ${last} ${year}`
@@ -96,7 +96,7 @@ const weekRangeText = computed(() => {
 // Nur die angezeigte Woche aus der API laden
 async function loadWeek() {
   const from = weekDays.value[0]?.isoDate
-  const to = weekDays.value[4]?.isoDate
+  const to = weekDays.value[weekDays.value.length - 1]?.isoDate
   if (!from || !to) return
   try {
     weekTasks.value = await taskApi.getTasks({ from, to })
@@ -319,7 +319,7 @@ function getLabelColor(task: Task): string {
           <!-- Spalte links: Uhrzeit -->
           <div class="time-label-cell">{{ slot }}</div>
 
-          <!-- 5 Spalten für Mo bis Fr -->
+          <!-- 7 Spalten für Mo bis So -->
           <div 
             v-for="day in weekDays" 
             :key="day.isoDate"
@@ -566,7 +566,7 @@ function getLabelColor(task: Task): string {
 
 .calendar-head {
   display: grid;
-  grid-template-columns: 75px repeat(5, 1fr);
+  grid-template-columns: 75px repeat(7, minmax(0, 1fr));
   border-bottom: 1px solid #E2E8F0;
   background: #FFFFFF;
 }
@@ -585,6 +585,7 @@ function getLabelColor(task: Task): string {
 
 .day-col-header {
   padding: 14px 12px;
+  min-width: 0;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -625,7 +626,7 @@ function getLabelColor(task: Task): string {
 
 .calendar-row {
   display: grid;
-  grid-template-columns: 75px repeat(5, 1fr);
+  grid-template-columns: 75px repeat(7, minmax(0, 1fr));
   min-height: 84px;
   border-bottom: 1px solid #F1F5F9;
 }
@@ -647,6 +648,7 @@ function getLabelColor(task: Task): string {
 .slot-cell {
   border-right: 1px solid #F1F5F9;
   padding: 6px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
