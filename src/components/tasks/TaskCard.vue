@@ -11,12 +11,9 @@ const emit = defineEmits<{
   (e: 'click', task: Task): void
 }>()
 
-const primaryLabel = computed<TaskLabel>(() => {
-  const first = props.task.labels?.[0] || props.task.label
-  if (first) {
-    return first
-  }
-  return { id: 0, name: 'Task', color: 'development' }
+const labels = computed<TaskLabel[]>(() => {
+  if (props.task.labels?.length) return props.task.labels
+  return props.task.label ? [props.task.label] : []
 })
 
 const recurrenceLabels: Record<string, string> = {
@@ -57,24 +54,20 @@ const dueDateLabel = computed(() => {
     @click="emit('click', props.task)"
   >
     <div class="card-header">
-      <span class="label-badge" :class="`label-${primaryLabel.color}`">
-        {{ primaryLabel.name }}
-      </span>
+      <h3 class="task-title">{{ props.task.title }}</h3>
 
       <button 
         type="button" 
         class="checkbox-btn" 
         :class="{ checked: props.task.completed }"
         @click.stop="emit('toggle', props.task.instanceId)"
-        aria-label="Toggle task completion"
+        :aria-label="props.task.completed ? 'Wieder öffnen' : 'Als erledigt markieren'" :aria-pressed="props.task.completed"
       >
         <svg v-if="props.task.completed" viewBox="0 0 24 24" width="14" height="14" stroke="white" stroke-width="3" fill="none">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       </button>
     </div>
-
-    <h3 class="task-title">{{ props.task.title }}</h3>
 
     <div class="due-row" :class="{ 'due-today': isDueToday }">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -84,7 +77,13 @@ const dueDateLabel = computed(() => {
       <span>{{ dueDateLabel }}{{ props.task.dueTime ? ` · ${props.task.dueTime.slice(0, 5)}` : '' }}</span>
     </div>
 
-    <div class="chips-row">
+    <div v-if="labels.length" class="card-labels">
+      <span v-for="label in labels" :key="label.id" class="label-badge" :class="`label-${label.color}`">
+        {{ label.name }}
+      </span>
+    </div>
+
+    <div v-if="recurrenceLabel || props.task.reminder" class="chips-row">
       <div v-if="recurrenceLabel" class="chip recurrence-chip">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M17 2l4 4-4 4"></path>
@@ -105,13 +104,13 @@ const dueDateLabel = computed(() => {
 
     <div class="card-footer">
       <div class="assignee-box">
-        <div class="assignee-avatar">
-          {{ props.task.assignee?.initials || 'TS' }}
+        <div v-if="props.task.assignee" class="assignee-avatar" aria-hidden="true">
+          {{ props.task.assignee.initials }}
         </div>
         <span class="assignee-name">{{ props.task.assignee?.name || 'Nicht zugewiesen' }}</span>
       </div>
 
-      <button type="button" class="more-btn" @click.stop>
+      <button type="button" class="more-btn" aria-label="Taskdetails anzeigen" @click.stop="emit('click', props.task)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
           <circle cx="5" cy="12" r="2"></circle>
           <circle cx="12" cy="12" r="2"></circle>
@@ -124,25 +123,19 @@ const dueDateLabel = computed(() => {
 
 <style scoped>
 .task-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .task-card:hover {
   border-color: #CBD5E1;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.06);
-  transform: translateY(-2px);
-}
-
-.task-card.is-completed {
-  opacity: 0.6;
 }
 
 .task-card.is-completed .task-title {
@@ -150,17 +143,26 @@ const dueDateLabel = computed(() => {
 }
 
 .card-header {
+  gap: 8px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
 }
 
 .label-badge {
+  max-width: 100%;
   font-size: 0.72rem;
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: 6px;
 }
 
 .label-development {
@@ -175,20 +177,21 @@ const dueDateLabel = computed(() => {
 
 .label-it {
   background-color: #E0F2FE;
-  color: #0284C7;
+  color: #075985;
 }
 
 .label-design {
   background-color: #FEE2E2;
-  color: #EF4444;
+  color: #B91C1C;
 }
 
 .label-organisation {
   background-color: #FEF3C7;
-  color: #D97706;
+  color: #92400E;
 }
 
 .checkbox-btn {
+  flex-shrink: 0;
   width: 22px;
   height: 22px;
   border: 2px solid #CBD5E1;
@@ -196,7 +199,6 @@ const dueDateLabel = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
   background: #FFFFFF;
 }
 
@@ -213,7 +215,6 @@ const dueDateLabel = computed(() => {
   font-size: 1.05rem;
   font-weight: 700;
   color: #1E293B;
-  margin-bottom: 12px;
   line-height: 1.35;
 }
 
@@ -224,11 +225,11 @@ const dueDateLabel = computed(() => {
   font-size: 0.8rem;
   color: #64748B;
   font-weight: 500;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .due-row.due-today {
-  color: #D97706;
+  color: #92400E;
 }
 
 .chips-row {
@@ -236,10 +237,12 @@ const dueDateLabel = computed(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .chip {
+  max-width: 100%;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -252,6 +255,10 @@ const dueDateLabel = computed(() => {
   font-weight: 500;
 }
 
+.due-row svg, .chip svg {
+  flex-shrink: 0;
+}
+
 .recurrence-chip {
   background-color: #EEF2FF;
   border-color: #E0E7FF;
@@ -259,6 +266,7 @@ const dueDateLabel = computed(() => {
 }
 
 .card-footer {
+  gap: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -268,12 +276,14 @@ const dueDateLabel = computed(() => {
 }
 
 .assignee-box {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .assignee-avatar {
+  flex-shrink: 0;
   width: 26px;
   height: 26px;
   background: #5243E0;
@@ -293,13 +303,13 @@ const dueDateLabel = computed(() => {
 }
 
 .more-btn {
+  flex-shrink: 0;
   color: #94A3B8;
   padding: 4px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
 }
 
 .more-btn:hover {

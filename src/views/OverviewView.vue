@@ -15,6 +15,10 @@ const {
   labelOptions, assigneeGroups, timeframeOptions, hasActiveFilters,
   resetFilters, loadFilterOptions, filteredTasks,
 } = useTaskFilters()
+const todayCount = computed(() => {
+  const today = new Date().toLocaleDateString('sv-SE')
+  return taskStore.tasks.filter(task => task.dueDate === today || task.dueDate === 'Heute').length
+})
 const visibleOpenCount = computed(() => filteredTasks.value.filter(task => !task.completed).length)
 const currentView = ref<'grid' | 'list'>('grid')
 const isModalOpen = ref(false)
@@ -57,7 +61,6 @@ onMounted(() => {
     <div class="overview-header">
       <div>
         <h1 class="page-title">Meine Tasks</h1>
-        <p class="page-subtitle">Plane, priorisiere und erledige deine Aufgaben an einem Ort.</p>
       </div>
 
       <button type="button" class="btn-primary" @click="isModalOpen = true">
@@ -74,66 +77,24 @@ onMounted(() => {
       <button type="button" class="retry-btn" @click="taskStore.fetchTasks">Wiederholen</button>
     </div>
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon icon-purple">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
-            </svg>
-          </div>
-          <span class="stat-label">Offen</span>
-        </div>
-        <div class="stat-value">{{ taskStore.openTasks.length }}</div>
-        <div class="stat-desc">Aktuell offen</div>
+    <dl class="stats-grid" aria-label="Aufgabenübersicht">
+      <div class="stat-today">
+        <dt>Heute fällig</dt>
+        <dd>{{ todayCount }}</dd>
       </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon icon-amber">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
-          <span class="stat-label">Heute fällig</span>
-        </div>
-        <div class="stat-value">
-          {{ taskStore.tasks.filter(t => t.dueDate === 'Heute' || t.dueDate === new Date().toISOString().slice(0, 10)).length }}
-        </div>
-        <div class="stat-desc">Fällig heute</div>
+      <div>
+        <dt>Offen</dt>
+        <dd>{{ taskStore.openTasks.length }}</dd>
       </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon icon-violet">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-          </div>
-          <span class="stat-label">Diese Woche</span>
-        </div>
-        <div class="stat-value">{{ taskStore.tasks.length }}</div>
-        <div class="stat-desc">Geplant</div>
+      <div>
+        <dt>Erledigt</dt>
+        <dd>{{ taskStore.completedTasks.length }}</dd>
       </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <div class="stat-icon icon-green">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
-          <span class="stat-label">Erledigt</span>
-        </div>
-        <div class="stat-value">{{ taskStore.completedTasks.length }}</div>
-        <div class="stat-desc stat-trend">Abgeschlossen</div>
+      <div>
+        <dt>Gesamt</dt>
+        <dd>{{ taskStore.tasks.length }}</dd>
       </div>
-    </div>
+    </dl>
 
     <div class="filter-bar">
       <div class="search-box">
@@ -144,7 +105,7 @@ onMounted(() => {
         <input 
           v-model="searchQuery" 
           type="text" 
-          placeholder="Tasks durchsuchen ..."
+          placeholder="Tasks durchsuchen ..." aria-label="Tasks durchsuchen"
           class="search-input"
         />
       </div>
@@ -163,7 +124,7 @@ onMounted(() => {
             type="button" 
             class="switch-btn" 
             :class="{ active: currentView === 'grid' }"
-            @click="currentView = 'grid'"
+            aria-label="Kachelansicht" :aria-pressed="currentView === 'grid'" @click="currentView = 'grid'"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
@@ -176,7 +137,7 @@ onMounted(() => {
             type="button" 
             class="switch-btn" 
             :class="{ active: currentView === 'list' }"
-            @click="currentView = 'list'"
+            aria-label="Listenansicht" :aria-pressed="currentView === 'list'" @click="currentView = 'list'"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -236,10 +197,12 @@ onMounted(() => {
 .overview-container {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
 }
 
 .overview-header {
+  flex-wrap: wrap;
+  gap: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -252,12 +215,6 @@ onMounted(() => {
   letter-spacing: -0.02em;
 }
 
-.page-subtitle {
-  color: #64748B;
-  margin-top: 4px;
-  font-size: 0.95rem;
-}
-
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -268,13 +225,10 @@ onMounted(() => {
   font-size: 0.9rem;
   padding: 10px 20px;
   border-radius: 12px;
-  transition: all 0.2s;
-  box-shadow: 0 4px 14px rgba(82, 67, 224, 0.3);
 }
 
 .btn-primary:hover {
   background-color: var(--primary-hover);
-  box-shadow: 0 6px 20px rgba(82, 67, 224, 0.4);
 }
 
 .error-banner {
@@ -300,81 +254,46 @@ onMounted(() => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+  width: min(100%, 29rem);
+  gap: 12px;
 }
 
-.stat-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+.stats-grid > div {
+  display: grid;
+  align-content: center;
+  aspect-ratio: 1.18;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--bg-card);
 }
 
-.stat-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+.stats-grid .stat-today {
+  background: var(--primary-light);
 }
 
-.stat-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.stats-grid .stat-today dt,
+.stats-grid .stat-today dd {
+  color: var(--primary-hover);
 }
 
-.icon-purple {
-  background: #EEF2FF;
-  color: #6366F1;
+.stats-grid dt {
+  font-size: .875rem;
+  color: var(--text-secondary);
 }
 
-.icon-amber {
-  background: #FEF3C7;
-  color: #D97706;
-}
-
-.icon-violet {
-  background: #F3E8FF;
-  color: #9333EA;
-}
-
-.icon-green {
-  background: #DCFCE7;
-  color: #16A34A;
-}
-
-.stat-label {
-  font-size: 0.85rem;
+.stats-grid dd {
+  margin-top: 4px;
+  font-size: 1.875rem;
   font-weight: 600;
-  color: #64748B;
-}
-
-.stat-value {
-  font-size: 1.85rem;
-  font-weight: 700;
-  color: #1E293B;
   line-height: 1.1;
-  margin-bottom: 6px;
-}
-
-.stat-desc {
-  font-size: 0.8rem;
-  color: #94A3B8;
-}
-
-.stat-trend {
-  color: #16A34A;
-  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .filter-bar {
+  flex-wrap: wrap;
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   border-radius: 16px;
@@ -389,7 +308,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
+  flex: 1 1 200px;
 }
 
 .search-input {
@@ -399,6 +318,11 @@ onMounted(() => {
   font-size: 0.9rem;
   color: #1E293B;
   font-family: inherit;
+}
+
+.search-box:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
 }
 
 .search-input::placeholder {
@@ -423,7 +347,6 @@ onMounted(() => {
   font-size: 0.82rem;
   font-weight: 500;
   color: #475569;
-  transition: all 0.15s;
 }
 
 .reset-filters:hover {
@@ -451,13 +374,11 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: #64748B;
-  transition: all 0.15s;
 }
 
 .switch-btn.active {
   background: #FFFFFF;
   color: var(--primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .section-title-row {
@@ -480,8 +401,8 @@ onMounted(() => {
 
 .tasks-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(240px, (100% - 32px) / 3)), 1fr));
+  gap: 16px;
 }
 
 .tasks-list {
