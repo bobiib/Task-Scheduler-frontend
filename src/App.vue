@@ -3,7 +3,8 @@ import MainLayout from './components/layout/MainLayout.vue'
 </script>
 
 <template>
-  <MainLayout>
+  <RouterView v-if="$route.meta.authPage" :key="$route.name" />
+  <MainLayout v-else>
     <RouterView />
   </MainLayout>
 </template>

@@ -5,9 +5,13 @@ import AllTasksView from '../views/AllTasksView.vue'
 import LabelsView from '../views/LabelsView.vue'
 import TeamView from '../views/TeamView.vue'
 
+import AuthView from '../views/AuthView.vue'
+
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
+        { path: '/login', name: 'login', component: AuthView, meta: { authPage: true } },
+        { path: '/register', name: 'register', component: AuthView, meta: { authPage: true } },
         { path: '/', name: 'overview', component: OverviewView },
         { path: '/timeline', name: 'timeline', component: TimelineView },
         { path: '/all-tasks', name: 'all-tasks', component: AllTasksView },

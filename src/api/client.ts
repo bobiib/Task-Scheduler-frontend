@@ -8,6 +8,12 @@ interface ApiErrorResponse {
     }
 }
 
+export class ApiError extends Error {
+    constructor(public readonly status: number, message: string) {
+        super(message)
+    }
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${BASE_URL}${endpoint}`
     const headers = {
@@ -29,7 +35,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
             }
         } catch {
         }
-        throw new Error(errorMessage)
+        throw new ApiError(response.status, errorMessage)
     }
 
     if (response.status === 204) {
