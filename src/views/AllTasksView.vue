@@ -14,7 +14,7 @@ const {
   labelOptions, assigneeGroups, timeframeOptions, hasActiveFilters,
   resetFilters, loadFilterOptions, filteredTasks,
 } = useTaskFilters()
-const viewMode = ref<'grid' | 'table'>('grid')
+const viewMode = ref<'grid' | 'table'>('table')
 
 const isDrawerOpen = ref(false)
 const isCreateModalOpen = ref(false)
@@ -28,6 +28,18 @@ onMounted(() => {
   taskStore.fetchTasks()
   loadFilterOptions()
 })
+
+function formatRecurrence(recurrence: NonNullable<Task['recurrence']>) {
+  const labels: Record<string, string> = {
+    daily: 'Täglich',
+    weekly: 'Wöchentlich',
+    monthly_day: 'Monatlich',
+    monthly_weekday: 'Monatlich',
+    yearly: 'Jährlich',
+  }
+  const type = typeof recurrence === 'string' ? recurrence : recurrence.type
+  return labels[type] ?? type
+}
 
 function openDetail(task: Task) {
   selectedInstanceId.value = task.instanceId
@@ -63,27 +75,28 @@ function deleteTask(id: number) {
 
     <p v-if="taskStore.error" class="error-message">{{ taskStore.error }}</p>
 
-    <div class="alltasks-summary">
-      <div class="summary-left">
-        <span class="summary-badge">
-          <strong>{{ taskStore.tasks.length }}</strong> Tasks gesamt
-        </span>
-        <span class="summary-badge open">
-          <strong>{{ taskStore.openTasks.length }}</strong> offen
-        </span>
-        <span class="summary-badge recurring">
-          <strong>{{ taskStore.tasks.filter(t => !!t.recurrence).length }}</strong> wiederkehrend
-        </span>
+    <dl class="alltasks-summary" aria-label="Aufgabenübersicht">
+      <div class="summary-open">
+        <dt>Offen</dt>
+        <dd>{{ taskStore.openTasks.length }}</dd>
       </div>
-    </div>
+      <div>
+        <dt>Gesamt</dt>
+        <dd>{{ taskStore.tasks.length }}</dd>
+      </div>
+      <div>
+        <dt>Wiederkehrend</dt>
+        <dd>{{ taskStore.tasks.filter(task => !!task.recurrence).length }}</dd>
+      </div>
+    </dl>
 
     <div class="toolbar">
       <div class="search-box">
-        <span class="search-icon">🔍</span>
+        <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
         <input 
           v-model="searchQuery" 
           type="text" 
-          placeholder="Tasks durchsuchen ..." 
+          placeholder="Tasks durchsuchen ..." aria-label="Tasks durchsuchen"
         />
       </div>
 
@@ -128,7 +141,7 @@ function deleteTask(id: number) {
           type="button" 
           :class="{ active: viewMode === 'grid' }" 
           @click="viewMode = 'grid'"
-          title="Kacheln"
+          title="Kacheln" aria-label="Kacheln" :aria-pressed="viewMode === 'grid'"
         >
           ▦
         </button>
@@ -136,7 +149,7 @@ function deleteTask(id: number) {
           type="button" 
           :class="{ active: viewMode === 'table' }" 
           @click="viewMode = 'table'"
-          title="Tabelle"
+          title="Tabelle" aria-label="Tabelle" :aria-pressed="viewMode === 'table'"
         >
           ≡
         </button>
@@ -155,26 +168,26 @@ function deleteTask(id: number) {
       />
     </div>
 
-    <div v-else class="task-table-card">
-      <div class="task-table-head">
-        <div>Task</div>
-        <div>Termin</div>
-        <div>Wiederholung</div>
-        <div>Zugewiesen</div>
-        <div>Status</div>
-        <div></div>
+    <div v-else class="task-table-card" role="table" aria-label="Alle Tasks">
+      <div class="task-table-head" role="row">
+        <div role="columnheader">Task</div>
+        <div role="columnheader">Termin</div>
+        <div role="columnheader">Wiederholung</div>
+        <div role="columnheader">Zugewiesen</div>
+        <div role="columnheader">Status</div>
+        <div role="columnheader" aria-label="Aktionen"></div>
       </div>
 
-      <div class="task-table-body">
+      <div class="task-table-body" role="rowgroup">
         <div 
           v-for="t in filteredTasks" 
           :key="t.instanceId"
-          class="task-table-row"
+          class="task-table-row" role="row"
           :class="{ 'is-completed': t.completed }"
           @click="openDetail(t)"
         >
-          <div class="task-cell-main">
-            <div class="task-row-title">{{ t.title }}</div>
+          <div class="task-cell-main" role="cell">
+            <button type="button" class="task-row-title" @click.stop="openDetail(t)">{{ t.title }}</button>
             <div class="task-row-sub">
               <span class="label-badge" :class="`label-${(t.labels?.[0] || t.label)?.color || 'development'}`">
                 {{ (t.labels?.[0] || t.label)?.name || 'Task' }}
@@ -183,36 +196,36 @@ function deleteTask(id: number) {
             </div>
           </div>
 
-          <div>
+          <div role="cell">
             <div class="date-chip" :class="{ urgent: t.isDueToday }">
-              <span>{{ t.dueDate }}{{ t.dueTime ? ` · ${t.dueTime}` : '' }}</span>
+              <span>{{ t.dueDate }}{{ t.dueTime ? ` · ${t.dueTime.slice(0, 5)}` : '' }}</span>
             </div>
           </div>
 
-          <div>
-            <span v-if="t.recurrence" class="repeat-chip">↻ {{ t.recurrence }}</span>
+          <div role="cell">
+            <span v-if="t.recurrence" class="repeat-chip">{{ formatRecurrence(t.recurrence) }}</span>
             <span v-else class="repeat-chip once">Einmalig</span>
           </div>
 
-          <div class="table-assignee">
-            <span class="avatar small">{{ t.assignee?.initials || 'TS' }}</span>
+          <div class="table-assignee" role="cell">
+            <span v-if="t.assignee" class="avatar small" aria-hidden="true">{{ t.assignee.initials }}</span>
             <span>{{ t.assignee?.name || 'Nicht zugewiesen' }}</span>
           </div>
 
-          <div>
+          <div role="cell">
             <span class="status-badge" :class="t.completed ? 'done' : 'open'">
               <span class="status-dot"></span>
               {{ t.completed ? 'Erledigt' : 'Offen' }}
             </span>
           </div>
 
-          <div class="table-actions">
+          <div class="table-actions" role="cell">
             <button 
               type="button" 
               class="row-check-button" 
               :class="{ checked: t.completed }"
               @click.stop="taskStore.toggleTask(t.instanceId)"
-              title="Status ändern"
+              :aria-label="t.completed ? 'Wieder öffnen' : 'Als erledigt markieren'" :aria-pressed="t.completed"
             >
               ✓
             </button>
@@ -293,45 +306,45 @@ function deleteTask(id: number) {
 }
 
 .alltasks-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  width: min(100%, calc(24rem + 24px));
+  gap: 12px;
   margin-bottom: 20px;
 }
 
-.summary-left {
-  display: flex;
-  gap: 10px;
+.alltasks-summary > div {
+  display: grid;
+  align-content: center;
+  aspect-ratio: 1.18;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--bg-card);
 }
 
-.summary-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  font-size: 0.8rem;
-  color: #475569;
+.alltasks-summary dt {
+  color: var(--text-secondary);
+  font-size: .8125rem;
+  overflow-wrap: anywhere;
 }
 
-.summary-badge.open {
-  background: #F7F5FF;
-  border-color: #E4DFFF;
+.alltasks-summary dd {
+  margin-top: 4px;
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-.summary-badge.open strong {
-  color: #5243E0;
+.alltasks-summary .summary-open {
+  background: var(--primary-light);
 }
 
-.summary-badge.recurring {
-  background: #F0FDF4;
-  border-color: #DCFCE7;
-}
-
-.summary-badge.recurring strong {
-  color: #16A34A;
+.summary-open dt,
+.summary-open dd {
+  color: var(--primary-hover);
 }
 
 .toolbar {
@@ -410,7 +423,7 @@ function deleteTask(id: number) {
 
 .task-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 248px), 1fr));
   gap: 18px;
 }
 
@@ -418,16 +431,18 @@ function deleteTask(id: number) {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   border-radius: 16px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
 }
 
 .task-table-head,
 .task-table-row {
   display: grid;
-  grid-template-columns: minmax(280px, 1.9fr) minmax(150px, 1fr) minmax(140px, 0.85fr) minmax(150px, 0.9fr) 115px 44px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 88px 40px;
   align-items: center;
-  column-gap: 18px;
+  column-gap: 12px;
+  min-width: 660px;
+  overflow-wrap: anywhere;
 }
 
 .task-table-head {
@@ -438,8 +453,6 @@ function deleteTask(id: number) {
   color: #64748B;
   font-size: 0.72rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .task-table-row {
@@ -459,12 +472,16 @@ function deleteTask(id: number) {
 }
 
 .task-table-row.is-completed {
-  opacity: 0.6;
+  background-color: #e9edf2;
+}
+
+.task-table-row.is-completed:hover {
+  background-color: #e2e8f0;
 }
 
 .task-table-row.is-completed .task-row-title {
   text-decoration: line-through;
-  color: #94A3B8;
+  color: var(--text-secondary);
 }
 
 .task-cell-main {
@@ -472,12 +489,13 @@ function deleteTask(id: number) {
 }
 
 .task-row-title {
+  display: block;
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
   font-size: 0.95rem;
   font-weight: 600;
   color: #1E293B;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .task-row-sub {

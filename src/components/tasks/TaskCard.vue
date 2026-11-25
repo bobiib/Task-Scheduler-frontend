@@ -138,6 +138,10 @@ const dueDateLabel = computed(() => {
   border-color: #CBD5E1;
 }
 
+.task-card.is-completed {
+  background-color: #e9edf2;
+}
+
 .task-card.is-completed .task-title {
   text-decoration: line-through;
 }
